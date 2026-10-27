@@ -55,6 +55,16 @@ const cases = [
     expect: { template: "sbi-upi-debit", bank: "SBI", accountType: "bank", account: "4321", merchant: "Swiggy", currency: "INR", amountPaise: -4550, date: "2026-11-03" },
   },
   {
+    name: "ICICI UPI debit",
+    sms: "ICICI Bank Acct XX246 debited for Rs 1.00 on 27-Oct-26; PRIYA NAIR credited. UPI:630012345678. Call 18002662 for dispute. SMS BLOCK 246 to 9215676766",
+    expect: { template: "icici-upi-debit", bank: "ICICI", accountType: "bank", account: "246", merchant: "PRIYA NAIR", currency: "INR", amountPaise: -100, date: "2026-10-27" },
+  },
+  {
+    name: "ICICI UPI debit with thousands",
+    sms: "ICICI Bank Acct XX246 debited for Rs 12,500.50 on 3-Nov-26; Zomato Ltd credited. UPI:630099998888. Call 18002662 for dispute. SMS BLOCK 246 to 9215676766",
+    expect: { template: "icici-upi-debit", bank: "ICICI", accountType: "bank", account: "246", merchant: "Zomato Ltd", currency: "INR", amountPaise: -1250050, date: "2026-11-03" },
+  },
+  {
     name: "generic credit falls back with low confidence",
     sms: "Dear SBI UPI User, ur A/cX4321 credited by Rs500 on 27Oct26 by (Ref no 630011112222)",
     expect: { template: "generic", bank: "SBI", accountType: "bank", account: "4321", merchant: null, currency: "INR", amountPaise: 50000, date: "2026-10-27" },

@@ -5,7 +5,7 @@
 // In the app: month view of captured transactions. As a widget: this month's spend.
 
 const store = importModule("fintrack/lib/store.js");
-const { capture } = importModule("fintrack/lib/capture.js");
+const { capture, recheck } = importModule("fintrack/lib/capture.js");
 const { money, monthLabel, shiftMonth, totals } = importModule("fintrack/lib/format.js");
 
 const RED = new Color("#d64545");
@@ -192,6 +192,7 @@ async function runApp() {
     table.reload();
   }
 
+  await recheck(ym);
   await render();
   await table.present(false);
 }
