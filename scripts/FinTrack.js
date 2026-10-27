@@ -82,7 +82,6 @@ function txRow(tx, onSelect) {
     tx.date.slice(5),
     tx.bank,
     tx.account ? "··" + tx.account : null,
-    tx.kind === "transfer" ? "transfer" : null,
     tx.confidence === "low" ? "check" : null,
   ]
     .filter(Boolean)
@@ -93,7 +92,7 @@ function txRow(tx, onSelect) {
   const amount = row.addText(money(tx.amountPaise, tx.currency));
   amount.widthWeight = 30;
   amount.rightAligned();
-  amount.titleColor = tx.kind === "transfer" ? GREY : tx.amountPaise < 0 ? RED : GREEN;
+  amount.titleColor = tx.amountPaise < 0 ? RED : GREEN;
   row.onSelect = onSelect;
   row.dismissOnSelect = false;
   return row;
