@@ -65,6 +65,21 @@ const cases = [
     expect: { template: "icici-upi-debit", bank: "ICICI", accountType: "bank", account: "246", merchant: "Zomato Ltd", currency: "INR", amountPaise: -1250050, date: "2026-11-03" },
   },
   {
+    name: "ICICI AutoPay account debit",
+    sms: "Rs 299.00 debited from ICICI Bank Savings Account XX246 on 21-Oct-26 towards Google for GOOGLE AutoPay Retrieval Ref No.629412345678",
+    expect: { template: "icici-account-debit", bank: "ICICI", accountType: "bank", account: "246", merchant: "Google", currency: "INR", amountPaise: -29900, date: "2026-10-21" },
+  },
+  {
+    name: "ICICI account debit without 'for' clause",
+    sms: "Rs 1,499.00 debited from ICICI Bank Savings Account XX246 on 2-Nov-26 towards Netflix Retrieval Ref No.629400001111",
+    expect: { template: "icici-account-debit", bank: "ICICI", accountType: "bank", account: "246", merchant: "Netflix", currency: "INR", amountPaise: -149900, date: "2026-11-02" },
+  },
+  {
+    name: "SBI AutoPay reminder is not a transaction",
+    sms: "Dear UPI User, UPI AutoPay for Indian Clearing Corporation Ltd debit of Rs.5000.00 is scheduled on .16/10/26, abc123@yespay. Please ensure sufficient balance in your account. -SBI",
+    expect: null,
+  },
+  {
     name: "generic credit falls back with low confidence",
     sms: "Dear SBI UPI User, ur A/cX4321 credited by Rs500 on 27Oct26 by (Ref no 630011112222)",
     expect: { template: "generic", bank: "SBI", accountType: "bank", account: "4321", merchant: null, currency: "INR", amountPaise: 50000, date: "2026-10-27" },
