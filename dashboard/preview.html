@@ -1,0 +1,60 @@
+<!doctype html>
+<!-- Laptop preview with fake data. Not installed on the phone (not in manifest.json).
+     Loads the same files Scriptable inlines; Save logs the rules instead of writing rules.json. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FinTrack dashboard preview</title>
+<link rel="stylesheet" href="style.css">
+<style>body { max-width: 400px; margin: 0 auto; min-height: 100vh; }</style>
+</head>
+<body>
+<div id="app"></div>
+<script>var module = { exports: {} };</script>
+<script src="../lib/tags.js"></script>
+<script>window.FT = { tags: module.exports }; module = { exports: {} };</script>
+<script src="../lib/format.js"></script>
+<script>FT.format = module.exports;</script>
+<script src="app.js"></script>
+<script>
+  const MERCHANTS = [
+    ["Swiggy", -41200, "HDFC", "5678"], ["Zomato", -38900, "HDFC", "5678"], ["Amazon", -59900, "SBI", "1234"],
+    ["Uber", -27600, "ICICI", "246"], ["BLUE TOKAI", -34000, "HDFC", "5678"], ["THIRD WAVE COFFEE", -41000, "ICICI", "246"],
+    ["Google", -29900, "ICICI", "246"], ["RAHUL K", -3000000, "SBI", "4321"], ["BIGBASKET", -184500, "SBI", "1234"],
+  ];
+  const months = {};
+  for (let back = 0; back < 6; back++) {
+    const d = new Date(2026, 9 - back, 1);
+    const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const list = [];
+    MERCHANTS.forEach(([merchant, paise, bank, account], i) => {
+      if ((i + back) % 4 === 3) return;
+      const day = String(27 - ((i * 3 + back) % 26)).padStart(2, "0");
+      list.push({ id: `${ym}-${i}`, date: `${ym}-${day}`, merchant, bank, account, currency: "INR",
+        amountPaise: Math.round(paise * (1 + ((i + back) % 3) / 10)), template: "generic", confidence: "high",
+        raw: `Rs ${-paise / 100} debited from A/c XX${account} towards ${merchant}`, capturedAt: `${ym}-${day}T10:00:00Z` });
+    });
+    list.push({ id: `${ym}-cb`, date: `${ym}-21`, merchant: null, bank: "SBI", account: null, currency: "INR", amountPaise: 59900,
+      template: "generic", confidence: "low", raw: "It's Cashback Time! Rs. 599 has been credited to your CASHBACK SBI Card account", capturedAt: `${ym}-21T10:00:00Z` });
+    if (back === 0) list.push({ id: "usd", date: "2026-10-19", merchant: "OPENAI *CHATGPT", bank: "HSBC", account: "1234", currency: "USD",
+      amountPaise: -2000, template: "hsbc-cc-spend", confidence: "high", raw: "HSBC Credit Card used at OPENAI", capturedAt: "2026-10-19T10:00:00Z" });
+    months[ym] = list.sort((a, b) => (a.date < b.date ? 1 : -1));
+  }
+  const rules = [
+    { when: { direction: "in", text: "cashback" }, set: { category: "Cashback" } },
+    { when: { merchant: "swiggy|zomato", direction: "out" }, set: { category: "Food" } },
+    { when: { merchant: "uber|ola|rapido" }, set: { category: "Travel", tags: ["commute"] } },
+    { when: { merchant: "^Amazon$" }, set: { category: "Shopping" } },
+    { when: { merchant: "^Google$" }, set: { category: "Subscriptions" } },
+    { when: { account: "1234" }, set: { owner: "Wife" } },
+    { when: { direction: "out", minAmount: 10000 }, set: { tags: ["large"] } },
+  ];
+  fintrack.send = (next) => {
+    console.log("[preview] would write rules.json:", JSON.stringify(next, null, 1));
+    setTimeout(() => fintrack.saved(true, ""), 150);
+  };
+  fintrack.load({ months, rules, currentMonth: "2026-10" });
+</script>
+</body>
+</html>

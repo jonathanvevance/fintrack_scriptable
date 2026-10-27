@@ -5,6 +5,10 @@
     { "src": "lib/store.js", "dest": "fintrack/lib/store.js" },
     { "src": "lib/capture.js", "dest": "fintrack/lib/capture.js" },
     { "src": "lib/tags.js", "dest": "fintrack/lib/tags.js" },
+    { "src": "lib/dashboard.js", "dest": "fintrack/lib/dashboard.js" },
+    { "src": "dashboard/index.html", "dest": "fintrack/dashboard/index.html" },
+    { "src": "dashboard/style.css", "dest": "fintrack/dashboard/style.css" },
+    { "src": "dashboard/app.js", "dest": "fintrack/dashboard/app.js" },
     { "src": "scripts/FinTrack.js", "dest": "FinTrack.js" },
     { "src": "scripts/FinTrack SMS.js", "dest": "FinTrack SMS.js" },
     { "src": "scripts/FinTrack Update.js", "dest": "FinTrack Update.js" }

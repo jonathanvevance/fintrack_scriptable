@@ -8,6 +8,7 @@ const store = importModule("fintrack/lib/store.js");
 const { capture, recheck } = importModule("fintrack/lib/capture.js");
 const { money, monthLabel, shiftMonth, totals } = importModule("fintrack/lib/format.js");
 const { compileRules, tagAll } = importModule("fintrack/lib/tags.js");
+const { openDashboard } = importModule("fintrack/lib/dashboard.js");
 
 const RED = new Color("#d64545");
 const GREEN = new Color("#2e9e5b");
@@ -138,6 +139,11 @@ async function runApp() {
     next.rightAligned();
     table.addRow(nav);
 
+    table.addRow(actionRow("▦ Open dashboard", async () => {
+      await openDashboard(ym);
+      rules = compileRules(await store.readRules());
+      await render();
+    }));
     table.addRow(actionRow("＋ Add SMS from clipboard", async () => addText(Pasteboard.pasteString() || "")));
     table.addRow(actionRow("＋ Paste SMS text…", async () => {
       const text = await promptText("Add SMS", "Paste a bank SMS to capture it, same as the automation would.");

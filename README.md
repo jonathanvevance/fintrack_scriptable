@@ -35,9 +35,11 @@ If `FinTrack SMS` fails, it keeps the message on the phone (`fintrack-pending.js
 
 Rules live only on the phone, in `fintrack/data/rules.json` (never in this repo, never touched by updates). The format is in `lib/tags.js`; `rules.example.json` has samples. Tap a transaction and choose **Always tag … as…** to add a rule without editing the file, or **Set category…** for that one transaction.
 
-## Tagging
+## Dashboard
 
-Rules live only on the phone, in `fintrack/data/rules.json` (never in this repo, never touched by updates). The format is in `lib/tags.js`; `rules.example.json` has samples. Tap a transaction and choose **Always tag … as…** to add a rule without editing the file, or **Set category…** for that one transaction.
+In `FinTrack`, tap **Open dashboard**. It is the page in `dashboard/`, shown by Scriptable in a web view (`lib/dashboard.js`) with every month and the rules handed in directly: no file picker, no network. Tabs: **Month** (totals, spend per category, tap a transaction to start a rule), **Rules** (add, edit, reorder, delete, each with its match count) and **Trends** (last 6 months). Saving a rule sends the whole list to Scriptable, which checks it and writes `rules.json`; the saved alert has **Undo**.
+
+To work on it on a laptop, open `dashboard/preview.html` (fake data; Save logs to the console).
 
 ## Adding a bank template
 
