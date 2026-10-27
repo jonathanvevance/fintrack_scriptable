@@ -117,6 +117,70 @@ const cases = [
   },
 ];
 
+const genericCases = [
+  {
+    name: "comma right after 'debited' still finds the amount",
+    sms: "Rs 500.00 debited, A/c XX1234 on 27-10-26. Not you? Call 18002586161 -HDFC Bank",
+    amountPaise: -50000,
+  },
+  {
+    name: "comma right after 'credited' still finds the amount",
+    sms: "Your A/c XX1234 is credited, INR 2,000.00 on 27-10-26 by NEFT. -Axis Bank",
+    amountPaise: 200000,
+  },
+  {
+    name: "debited before credited is money out",
+    sms: "Rs 1,000 debited from A/c XX1234 and credited to abc@ybl on 27-10-26 -HDFC",
+    amountPaise: -100000,
+  },
+  {
+    name: "credited before debited is money in",
+    sms: "Rs 500.00 credited to A/c XX1234 from rahul@okaxis on 27-10-26. Debited from sender's bank. -HDFC",
+    amountPaise: 50000,
+  },
+  {
+    name: "IMPS credited to beneficiary is money out",
+    sms: "IMPS of Rs 5,000.00 from A/c XX1234 credited to beneficiary A/c XX9999 on 27-10-26. -Kotak Bank",
+    amountPaise: -500000,
+  },
+  {
+    name: "reworded HSBC NEFT credited to SBIN A/c is money out",
+    sms: "HSBC: Your NEFT txn with ref no HSBCN1 for INR 25,000.00 has been credited to the SBIN A/c XXXX4321 of ARJUN MEHTA on 17-10-2026.",
+    amountPaise: -2500000,
+  },
+  {
+    name: "credited to your A/c is money in",
+    sms: "INR 2,000.00 credited to your A/c XX1234 on 27-10-26 by UPI. -ICICI Bank",
+    amountPaise: 200000,
+  },
+  {
+    name: "reversal is money in",
+    sms: "Rs.500 debited from A/c XX5678 on 20-10-26 has been reversed and credited back to your account. -HDFC Bank",
+    amountPaise: 50000,
+  },
+  {
+    name: "real debit with an OTP safety footer is kept",
+    sms: "Rs.250.00 debited from A/c XX5678 on 27-10-26 to VPA swiggy@ybl. Never share your OTP with anyone. -HDFC Bank",
+    amountPaise: -25000,
+  },
+];
+for (const c of genericCases) eq(c.name, pick(parseSms(c.sms, RECEIVED), ["template", "amountPaise"]), { template: "generic", amountPaise: c.amountPaise });
+
+const notTransactions = [
+  ["OTP", "123456 is your OTP for txn of INR 500.00 at AMAZON. Do not share. -HDFC Bank"],
+  ["future debit", "Rs 299.00 will be debited from your ICICI Bank Savings Account XX246 on 21-Oct-26 towards Google for GOOGLE AutoPay"],
+  ["future auto-debit", "Your SIP of Rs 1,500 will be auto-debited from A/c XX1234 on 05-11-26. -Axis Bank"],
+  ["future charge", "Your HSBC Credit Card XX1234 will be charged INR 649.00 for the annual fee on 05/11/26."],
+  ["conditional debit", "Rs 649 will not be debited if balance is low on 05-11-26. -SBI"],
+  ["scheduled debit", "Standing instruction: Rs 2,500 scheduled to be debited from A/c XX1234 on 01-11-26. -HDFC Bank"],
+  ["cashback promise", "Cashback of Rs 500 will be credited to your A/c XX1234 within 7 days. -ICICI Bank"],
+  ["declined", "Txn of Rs 500.00 on HDFC Bank Card XX1234 at AMAZON declined due to insufficient balance."],
+  ["collect request", "RAHUL has requested money of Rs.200 from you; amount will be debited on approval. -SBI"],
+  ["bill reminder", "Total due Rs 12,345 is due on 05/11/26. Paid already? Ignore. -HSBC"],
+  ["minimum due", "Your card statement: minimum due Rs 620; spent Rs 12,345 this cycle. -SBI Card"],
+];
+for (const [name, sms] of notTransactions) eq(`${name} is not a transaction`, parseSms(sms, RECEIVED), null);
+
 for (const c of cases) eq(c.name, pick(parseSms(c.sms, RECEIVED), c.keys || KEYS), c.expect);
 
 eq("OTP is ignored", parseSms("123456 is your OTP for txn of INR 500.00 at AMAZON. Do not share. -HDFC Bank", RECEIVED), null);

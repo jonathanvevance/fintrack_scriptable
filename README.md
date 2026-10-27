@@ -29,6 +29,8 @@ Library code goes to `fintrack/lib/` inside Scriptable's folder.
 
 Push to `master`, then on the phone run `FinTrack Update` (or tap **Update FinTrack** at the bottom of `FinTrack`).
 
+If `FinTrack SMS` fails, it keeps the message on the phone (`fintrack-pending.json` in Scriptable's local folder) and notifies you; opening `FinTrack` saves it. A data file that cannot be read is never overwritten: it is copied to `*.corrupt-<time>.json` and FinTrack shows the error.
+
 ## Adding a bank template
 
 Templates live in `lib/parse.js` (`TEMPLATES`). Messages no template recognises go to the generic parser (marked "check") or to **Unrecognised** in `FinTrack`, where **Copy text** gives you the exact wording to add a template and a test case for.

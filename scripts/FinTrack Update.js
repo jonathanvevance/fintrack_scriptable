@@ -42,16 +42,25 @@ async function main() {
   const base = `https://raw.githubusercontent.com/${REPO}/${commit.sha}/`;
   const manifest = JSON.parse(await fetchText(base + "manifest.json"));
 
+  // Download everything before writing anything, so a dropped connection never leaves
+  // a mix of old and new files.
   const files = manifest.files;
+  const downloads = [];
   for (let i = 0; i < files.length; i++) {
     const { src, dest } = files[i];
-    const text = await fetchText(base + encodeURI(src));
+    if (dest.includes("..") || dest.startsWith("/") || dest.startsWith("fintrack/data")) {
+      throw new Error(`Refusing to write ${dest}`);
+    }
+    downloads.push({ dest, text: await fetchText(base + encodeURI(src)) });
+    console.log(`[PROGRESS] Downloaded ${i + 1}/${files.length}: ${src}`);
+  }
+  for (const { dest, text } of downloads) {
     const path = fm.joinPath(root, dest);
     const dir = path.slice(0, path.lastIndexOf("/"));
     if (!fm.fileExists(dir)) fm.createDirectory(dir, true);
     fm.writeString(path, text);
-    console.log(`[PROGRESS] Installed ${i + 1}/${files.length}: ${dest}`);
   }
+  console.log(`[PROGRESS] Installed ${downloads.length} files`);
 
   const versionPath = fm.joinPath(root, "fintrack/version.json");
   fm.writeString(versionPath, JSON.stringify({ ...commit, installedAt: new Date().toISOString() }, null, 1));
