@@ -75,6 +75,24 @@ const cases = [
     expect: { template: "icici-account-debit", bank: "ICICI", accountType: "bank", account: "246", merchant: "Netflix", currency: "INR", amountPaise: -149900, date: "2026-11-02" },
   },
   {
+    name: "HSBC NEFT to own SBI account is an outgoing transfer",
+    sms: "HSBC: Dear HSBC Customer, your NEFT transaction with reference number HSBCN26290123456 for INR 25,000.00 has been credited to the SBIN A/c XXXXXXX4321 of ARJUN MEHTA on 17-10-2026 at 16:08:02 .",
+    keys: KEYS.concat(["kind"]),
+    expect: { template: "hsbc-neft-out", bank: "HSBC", accountType: "bank", account: null, merchant: "ARJUN MEHTA (SBIN ··4321)", currency: "INR", amountPaise: -2500000, date: "2026-10-17", kind: "transfer" },
+  },
+  {
+    name: "HSBC NEFT to someone else is spending",
+    sms: "HSBC: Dear HSBC Customer, your NEFT transaction with reference number HSBCN26290999999 for INR 8000 has been credited to the HDFC A/c XXXX1111 of ANITA SHARMA on 20-10-2026 at 09:00:00 .",
+    keys: KEYS.concat(["kind"]),
+    expect: { template: "hsbc-neft-out", bank: "HSBC", accountType: "bank", account: null, merchant: "ANITA SHARMA (HDFC ··1111)", currency: "INR", amountPaise: -800000, date: "2026-10-20", kind: undefined },
+  },
+  {
+    name: "SBI UPI to self is a transfer",
+    sms: "Dear UPI user A/C X4321 debited by 500.00 on date 27Oct26 trf to ARJUN MEHTA Refno 630000000001 If not u? call-1800111109 for other services-18001234-SBI",
+    keys: ["template", "amountPaise", "kind"],
+    expect: { template: "sbi-upi-debit", amountPaise: -50000, kind: "transfer" },
+  },
+  {
     name: "SBI AutoPay reminder is not a transaction",
     sms: "Dear UPI User, UPI AutoPay for Indian Clearing Corporation Ltd debit of Rs.5000.00 is scheduled on .16/10/26, abc123@yespay. Please ensure sufficient balance in your account. -SBI",
     expect: null,
@@ -96,7 +114,7 @@ const cases = [
   },
 ];
 
-for (const c of cases) eq(c.name, pick(parseSms(c.sms, RECEIVED), KEYS), c.expect);
+for (const c of cases) eq(c.name, pick(parseSms(c.sms, RECEIVED), c.keys || KEYS), c.expect);
 
 eq("OTP is ignored", parseSms("123456 is your OTP for txn of INR 500.00 at AMAZON. Do not share. -HDFC Bank", RECEIVED), null);
 eq("collect request is ignored", parseSms("RAHUL has requested money of Rs.200 from you on Google Pay. Approve with UPI PIN. -SBI", RECEIVED), null);
@@ -121,6 +139,7 @@ eq(
     { currency: "INR", amountPaise: -100 },
     { currency: "INR", amountPaise: 300 },
     { currency: "USD", amountPaise: -50 },
+    { currency: "INR", amountPaise: -9999, kind: "transfer" },
   ]),
   { INR: { out: 100, in: 300, count: 2 }, USD: { out: 50, in: 0, count: 1 } }
 );

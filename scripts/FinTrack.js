@@ -78,7 +78,13 @@ function txRow(tx, onSelect) {
   const row = new UITableRow();
   row.height = 56;
   const who = tx.merchant || tx.bank || "Unknown";
-  const sub = [tx.date.slice(5), tx.bank, tx.account ? "··" + tx.account : null, tx.confidence === "low" ? "check" : null]
+  const sub = [
+    tx.date.slice(5),
+    tx.bank,
+    tx.account ? "··" + tx.account : null,
+    tx.kind === "transfer" ? "transfer" : null,
+    tx.confidence === "low" ? "check" : null,
+  ]
     .filter(Boolean)
     .join(" · ");
   const left = row.addText(who, sub);
@@ -87,7 +93,7 @@ function txRow(tx, onSelect) {
   const amount = row.addText(money(tx.amountPaise, tx.currency));
   amount.widthWeight = 30;
   amount.rightAligned();
-  amount.titleColor = tx.amountPaise < 0 ? RED : GREEN;
+  amount.titleColor = tx.kind === "transfer" ? GREY : tx.amountPaise < 0 ? RED : GREEN;
   row.onSelect = onSelect;
   row.dismissOnSelect = false;
   return row;
