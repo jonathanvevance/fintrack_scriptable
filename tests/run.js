@@ -85,6 +85,17 @@ const cases = [
     expect: { template: "hsbc-neft-out", bank: "HSBC", accountType: "bank", account: null, merchant: "ANITA SHARMA (HDFC ··1111)", currency: "INR", amountPaise: -800000, date: "2026-10-20" },
   },
   {
+    name: "SBI card spend at Amazon",
+    sms: "Rs.1,234.00 spent on your SBI Credit Card ending 5678 at AMAZONPAYINDIAPRIVA on 21/10/26. Trxn. not done by you? Report at https://sbicard.com/Dispute",
+    keys: KEYS.concat(["merchantRaw"]),
+    expect: { template: "sbi-cc-spend", bank: "SBI", accountType: "credit_card", account: "5678", merchant: "Amazon", currency: "INR", amountPaise: -123400, date: "2026-10-21", merchantRaw: "AMAZONPAYINDIAPRIVA" },
+  },
+  {
+    name: "SBI card spend elsewhere keeps the bank's merchant name",
+    sms: "Rs.89.00 spent on your SBI Credit Card ending 5678 at UBER INDIA SYSTEMS on 22/10/26. Trxn. not done by you? Report at https://sbicard.com/Dispute",
+    expect: { template: "sbi-cc-spend", bank: "SBI", accountType: "credit_card", account: "5678", merchant: "UBER INDIA SYSTEMS", currency: "INR", amountPaise: -8900, date: "2026-10-22" },
+  },
+  {
     name: "SBI AutoPay reminder is not a transaction",
     sms: "Dear UPI User, UPI AutoPay for Indian Clearing Corporation Ltd debit of Rs.5000.00 is scheduled on .16/10/26, abc123@yespay. Please ensure sufficient balance in your account. -SBI",
     expect: null,
