@@ -7,6 +7,7 @@
 const store = importModule("fintrack/lib/store.js");
 const { capture, recheck } = importModule("fintrack/lib/capture.js");
 const { money, monthLabel, shiftMonth, totals } = importModule("fintrack/lib/format.js");
+const { compileRules, tagAll } = importModule("fintrack/lib/tags.js");
 
 const RED = new Color("#d64545");
 const GREEN = new Color("#2e9e5b");
@@ -46,12 +47,12 @@ async function alert(title, message, actions) {
   return a.presentSheet();
 }
 
-async function promptText(title, message) {
+async function promptText(title, message, placeholder = "Paste the SMS here", value = "", action = "Add") {
   const a = new Alert();
   a.title = title;
   a.message = message;
-  a.addTextField("Paste the SMS here", "");
-  a.addAction("Add");
+  a.addTextField(placeholder, value);
+  a.addAction(action);
   a.addCancelAction("Cancel");
   if ((await a.present()) === -1) return null;
   return a.textFieldValue(0);
@@ -80,6 +81,9 @@ function txRow(tx, onSelect) {
   const who = tx.merchant || tx.bank || "Unknown";
   const sub = [
     tx.date.slice(5),
+    tx.category,
+    tx.owner,
+    ...tx.tags.map((tag) => "#" + tag),
     tx.bank,
     tx.account ? "··" + tx.account : null,
     tx.confidence === "low" ? "check" : null,
@@ -102,6 +106,7 @@ async function runApp() {
   const table = new UITable();
   table.showSeparators = true;
   let ym = currentMonth();
+  let rules = compileRules(await store.readRules());
 
   async function addText(text) {
     const result = await capture(text, new Date());
@@ -112,7 +117,7 @@ async function runApp() {
 
   async function render() {
     table.removeAllRows();
-    const list = await store.listMonth(ym);
+    const list = tagAll(rules, await store.listMonth(ym));
     const unparsed = await store.listUnparsed();
     const { inr, foreign } = totalsLine(list);
 
@@ -178,12 +183,29 @@ async function runApp() {
     for (const tx of list) {
       table.addRow(txRow(tx, async () => {
         const details = `${money(tx.amountPaise, tx.currency)} · ${tx.date} · ${tx.template}\n\n${tx.raw}`;
-        const pick = await alert(tx.merchant || tx.bank || "Transaction", details, ["Copy SMS", "Delete"]);
+        const actions = ["Copy SMS", "Set category…", "Delete"];
+        if (tx.merchant) actions.push(`Always tag ${tx.merchant} as…`);
+        const pick = await alert(tx.merchant || tx.bank || "Transaction", details, actions);
         if (pick === 0) Pasteboard.copyString(tx.raw);
         if (pick === 1) {
-          await store.deleteTransaction(ym, tx.id);
-          await render();
+          const category = await promptText("Category", "Only this transaction. Leave empty to go back to the rules.", "Category", tx.category || "", "Save");
+          if (category !== null) {
+            const manual = { ...(tx.manual || {}) };
+            if (category.trim()) manual.category = category.trim();
+            else delete manual.category;
+            await store.updateTransaction(ym, tx.id, { manual });
+          }
         }
+        if (pick === 2) await store.deleteTransaction(ym, tx.id);
+        if (pick === 3) {
+          const category = await promptText("Always tag as", `Every ${tx.merchant} transaction, past and future.`, "Category", tx.category || "", "Save");
+          if (category && category.trim()) {
+            const escaped = tx.merchant.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            await store.addRule({ when: { merchant: `^${escaped}$` }, set: { category: category.trim() } });
+            rules = compileRules(await store.readRules());
+          }
+        }
+        if (pick > 0) await render();
       }));
     }
 

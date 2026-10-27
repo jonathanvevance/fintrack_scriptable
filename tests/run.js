@@ -10,6 +10,7 @@ function load(path) {
 
 const { parseSms, parseDate } = load("lib/parse.js");
 const { money, shiftMonth, totals } = load("lib/format.js");
+const { compileRules, tagsFor, tagAll } = load("lib/tags.js");
 
 let failures = 0;
 let count = 0;
@@ -209,6 +210,29 @@ eq(
   ]),
   { INR: { out: 100, in: 300, count: 2 }, USD: { out: 50, in: 0, count: 1 } }
 );
+
+const rules = compileRules(JSON.parse(readFile("rules.example.json")));
+const tx = (fields) => ({ merchant: null, raw: "", bank: "SBI", template: "generic", account: null, currency: "INR", amountPaise: -100, ...fields });
+const tagged = (fields) => tagsFor(rules, tx(fields));
+eq("rule matches merchant pattern", tagged({ merchant: "SWIGGY" }), { category: "Food", owner: null, tags: [] });
+eq("direction condition excludes money in", tagged({ merchant: "Swiggy", amountPaise: 100 }).category, null);
+eq("cashback from text and direction", tagged({ raw: "Rs. 599 credited to your CASHBACK SBI Card", amountPaise: 59900 }).category, "Cashback");
+eq("category and owner come from different rules", tagged({ merchant: "Uber", account: "1234" }), { category: "Travel", owner: "Partner", tags: ["commute"] });
+eq("tags combine across rules", tagged({ merchant: "Uber", amountPaise: -1500000 }).tags, ["commute", "large"]);
+eq("minAmount is in rupees", tagged({ amountPaise: -999900 }).tags, []);
+eq("first matching rule wins", tagsFor(compileRules([
+  { when: { merchant: "^Amazon$" }, set: { category: "Shopping" } },
+  { when: { merchant: "amazon" }, set: { category: "Other" } },
+]), tx({ merchant: "Amazon" })).category, "Shopping");
+eq("manual value beats rules", tagged({ merchant: "Swiggy", manual: { category: "Party" } }).category, "Party");
+eq("empty rules tag nothing", tagsFor(compileRules([]), tx({})), { category: null, owner: null, tags: [] });
+eq("tagAll leaves stored list unchanged", (() => {
+  const list = [tx({ merchant: "Zomato" })];
+  return [tagAll(rules, list)[0].category, list[0].category];
+})(), ["Food", undefined]);
+const compileError = (r) => { try { compileRules(r); return null; } catch (e) { return e.message; } };
+eq("unknown condition is rejected", compileError([{ when: { merchnat: "x" } }]), 'rules.json rule 1: unknown condition "merchnat"');
+eq("bad direction is rejected", compileError([{}, { when: { direction: "both" } }]), 'rules.json rule 2: direction must be "in" or "out", got both');
 
 print(failures ? `[PROGRESS] ${failures}/${count} tests failed` : `[PROGRESS] All ${count} tests passed`);
 if (failures) throw new Error("tests failed");

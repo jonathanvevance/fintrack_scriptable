@@ -31,6 +31,14 @@ Push to `master`, then on the phone run `FinTrack Update` (or tap **Update FinTr
 
 If `FinTrack SMS` fails, it keeps the message on the phone (`fintrack-pending.json` in Scriptable's local folder) and notifies you; opening `FinTrack` saves it. A data file that cannot be read is never overwritten: it is copied to `*.corrupt-<time>.json` and FinTrack shows the error.
 
+## Tagging
+
+Rules live only on the phone, in `fintrack/data/rules.json` (never in this repo, never touched by updates). The format is in `lib/tags.js`; `rules.example.json` has samples. Tap a transaction and choose **Always tag … as…** to add a rule without editing the file, or **Set category…** for that one transaction.
+
+## Tagging
+
+Rules live only on the phone, in `fintrack/data/rules.json` (never in this repo, never touched by updates). The format is in `lib/tags.js`; `rules.example.json` has samples. Tap a transaction and choose **Always tag … as…** to add a rule without editing the file, or **Set category…** for that one transaction.
+
 ## Adding a bank template
 
 Templates live in `lib/parse.js` (`TEMPLATES`). Messages no template recognises go to the generic parser (marked "check") or to **Unrecognised** in `FinTrack`, where **Copy text** gives you the exact wording to add a template and a test case for.

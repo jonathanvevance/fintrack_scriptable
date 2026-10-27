@@ -4,6 +4,7 @@
     { "src": "lib/format.js", "dest": "fintrack/lib/format.js" },
     { "src": "lib/store.js", "dest": "fintrack/lib/store.js" },
     { "src": "lib/capture.js", "dest": "fintrack/lib/capture.js" },
+    { "src": "lib/tags.js", "dest": "fintrack/lib/tags.js" },
     { "src": "scripts/FinTrack.js", "dest": "FinTrack.js" },
     { "src": "scripts/FinTrack SMS.js", "dest": "FinTrack SMS.js" },
     { "src": "scripts/FinTrack Update.js", "dest": "FinTrack Update.js" }
