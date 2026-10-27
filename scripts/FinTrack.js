@@ -59,7 +59,7 @@ async function promptText(title, message) {
 
 async function showResult(result) {
   const a = new Alert();
-  a.title = { saved: "Saved", duplicate: "Already saved", unparsed: "Not recognised", empty: "Nothing to add" }[result.status];
+  a.title = { saved: "Saved", duplicate: "Already saved", unparsed: "Not recognised", empty: "Nothing to add", copied: "Copied" }[result.status];
   a.message = result.summary;
   a.addAction("OK");
   await a.present();
@@ -134,12 +134,33 @@ async function runApp() {
       if (text !== null) await addText(text);
     }));
 
-    if (unparsed.length) {
-      table.addRow(actionRow(`⚠ ${unparsed.length} unrecognised message(s)`, async () => {
-        const u = unparsed[0];
-        const pick = await alert("Unrecognised SMS", u.text, ["Copy text", "Delete"]);
-        if (pick === 0) Pasteboard.copyString(u.text);
-        if (pick === 1) await store.deleteUnparsed(u.id);
+    const toCheck = list.filter((t) => t.confidence === "low");
+    if (unparsed.length || toCheck.length) {
+      table.addRow(actionRow(`⚠ ${unparsed.length} unrecognised · ${toCheck.length} to check`, async () => {
+        const pick = await alert(
+          "Messages to review",
+          "Copy them all and paste into the FinTrack dev chat to get templates added.",
+          ["Copy all for review", "Review unrecognised one by one", "Clear unrecognised"]
+        );
+        if (pick === 0) {
+          const blocks = [
+            ...unparsed.map((u) => `[unrecognised]\n${u.text}`),
+            ...toCheck.map((t) => `[check: parsed as ${money(t.amountPaise, t.currency)} ${t.bank || "?"} ··${t.account || "?"}]\n${t.raw}`),
+          ];
+          Pasteboard.copyString(blocks.join("\n\n---\n\n"));
+          await showResult({ status: "copied", summary: `Copied ${blocks.length} message(s)` });
+        }
+        if (pick === 1) {
+          for (const u of unparsed) {
+            const choice = await alert("Unrecognised SMS", u.text, ["Copy text", "Delete", "Next"]);
+            if (choice === -1) break;
+            if (choice === 0) Pasteboard.copyString(u.text);
+            if (choice === 1) await store.deleteUnparsed(u.id);
+          }
+        }
+        if (pick === 2) {
+          for (const u of unparsed) await store.deleteUnparsed(u.id);
+        }
         await render();
       }));
     }
