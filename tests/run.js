@@ -9,7 +9,7 @@ function load(path) {
 }
 
 const { parseSms, parseDate } = load("lib/parse.js");
-const { money, shiftMonth, totals, categoryTotals } = load("lib/format.js");
+const { money, shiftMonth, totals, categoryTotals, categoryChanges } = load("lib/format.js");
 const { compileRules, tagsFor, tagAll, describeRule } = load("lib/tags.js");
 
 let failures = 0;
@@ -253,6 +253,19 @@ eq(
     { currency: "INR", amountPaise: -200 },
   ]),
   [{ category: null, paise: 1200 }, { category: "Food", paise: 800 }]
+);
+
+eq(
+  "categoryChanges compares months, biggest change first, ignores untagged",
+  categoryChanges(
+    [{ currency: "INR", amountPaise: -1000, category: "Food" }, { currency: "INR", amountPaise: -500, category: "Shop" }, { currency: "INR", amountPaise: -900 }],
+    [{ currency: "INR", amountPaise: -3000, category: "Food" }, { currency: "INR", amountPaise: -200, category: "Fuel" }]
+  ),
+  [
+    { category: "Food", now: 1000, before: 3000, delta: -2000 },
+    { category: "Shop", now: 500, before: 0, delta: 500 },
+    { category: "Fuel", now: 0, before: 200, delta: -200 },
+  ]
 );
 
 print(failures ? `[PROGRESS] ${failures}/${count} tests failed` : `[PROGRESS] All ${count} tests passed`);

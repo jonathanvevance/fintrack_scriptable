@@ -47,11 +47,13 @@
     { when: { merchant: "uber|ola|rapido" }, set: { category: "Travel", tags: ["commute"] } },
     { when: { merchant: "^Amazon$" }, set: { category: "Shopping" } },
     { when: { merchant: "^Google$" }, set: { category: "Subscriptions" } },
+    { when: { merchant: "^BIGBASKET$" }, set: { category: "Groceries" } },
+    { when: { merchant: "^RAHUL K$" }, set: { category: "Transfers" } },
     { when: { account: "1234" }, set: { owner: "Wife" } },
     { when: { direction: "out", minAmount: 10000 }, set: { tags: ["large"] } },
   ];
-  fintrack.send = (next) => {
-    console.log("[preview] would write rules.json:", JSON.stringify(next, null, 1));
+  fintrack.send = (payload) => {
+    console.log("[preview] Scriptable would save:", JSON.stringify(payload, null, 1));
     setTimeout(() => fintrack.saved(true, ""), 150);
   };
   fintrack.load({ months, rules, currentMonth: "2026-10" });
