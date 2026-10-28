@@ -18,11 +18,11 @@ body::before { content: ""; position: fixed; top: var(--banner); left: 0; right:
 button { font: inherit; color: inherit; background: none; border: none; padding: 0; text-align: inherit; cursor: pointer; }
 input { font: inherit; color: var(--text); background: none; border: none; outline: none; min-width: 0; }
 input::placeholder { color: var(--sec); }
-.screen { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
+.screen { padding-top: max(0px, calc(var(--banner) - env(safe-area-inset-top))); padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
 .screen.no-tabs { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
 
 /* Navigation */
-.nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; padding: 0 16px; background: color-mix(in srgb, var(--bg) 85%, transparent); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); }
+.nav { position: sticky; top: var(--banner); z-index: 4; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; padding: 0 16px; background: color-mix(in srgb, var(--bg) 85%, transparent); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); }
 .nav > * { flex: 1; } .nav .mid { text-align: center; font-weight: 600; white-space: nowrap; } .nav .end { text-align: right; }
 .nav button { color: var(--blue); }
 .large { font-size: 34px; font-weight: 700; letter-spacing: .3px; padding: 2px 16px 10px; }

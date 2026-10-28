@@ -307,7 +307,7 @@
     const list = periodTx();
     const shown = screen.filter === "all" ? list : screen.filter === "untagged" ? list.filter((t) => !t.category) : list.filter((t) => t.category === screen.filter);
     const title = screen.filter === "all" ? periodLabel() : screen.filter === "untagged" ? "Needs a Category" : screen.filter;
-    const isCategory = screen.filter !== "all" && screen.filter !== "untagged";
+    const isCategory = screen.filter !== "all" && screen.filter !== "untagged" && state.tab !== "trends";
     return `${backNav(title, isCategory ? `<button data-act="see-trend" data-value="${esc(screen.filter)}">See Trend</button>` : "")}<div style="height:8px"></div>
       <div class="group">${shown.map(txRow).join("") || `<div class="empty">Nothing here</div>`}</div>`;
   }
