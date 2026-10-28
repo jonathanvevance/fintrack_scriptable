@@ -1,6 +1,6 @@
 <!doctype html>
 <!-- Laptop preview with fake data. Not installed on the phone (not in manifest.json).
-     Loads the same files Scriptable inlines; Save logs the rules instead of writing rules.json. -->
+     Loads the same files Scriptable inlines; Save logs the change instead of writing files. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -15,7 +15,9 @@
 <script src="../lib/tags.js"></script>
 <script>window.FT = { tags: module.exports }; module = { exports: {} };</script>
 <script src="../lib/format.js"></script>
-<script>FT.format = module.exports;</script>
+<script>FT.format = module.exports; module = { exports: {} };</script>
+<script src="../lib/accounts.js"></script>
+<script>FT.accounts = module.exports;</script>
 <script src="app.js"></script>
 <script>
   const MERCHANTS = [
@@ -45,6 +47,11 @@
     });
     list.push({ id: `${ym}-cb`, date: `${ym}-21`, merchant: null, bank: "SBI", account: null, currency: "INR", amountPaise: 59900,
       template: "generic", confidence: "low", raw: "It's Cashback Time! Rs. 599 has been credited to your CASHBACK SBI Card account", capturedAt: `${ym}-21T10:00:00Z` });
+    if (back === 0) list.push(
+      { id: "self-in", date: "2026-10-25", merchant: "you.name@sbi", bank: "HSBC", account: "6001", currency: "INR", amountPaise: 2000000, template: "hsbc-upi-credit", confidence: "high",
+        raw: "Your HSBC Acc XXXXXX6001 is credited for INR 20,000.00 on 25-Oct-26 from you.name@sbi. UPI Ref No 600000000001", capturedAt: "2026-10-25T10:00:00Z" },
+      { id: "self-bill", date: "2026-10-24", merchant: "SBI CARDS AND PAYMENT", bank: "HSBC", account: "6001", currency: "INR", amountPaise: -1543000, template: "hsbc-account-paid", confidence: "high",
+        raw: "INR 15,430.00 is paid from HSBC account XXXXXX6001 to SBI CARDS AND PAYMENT on 24-Oct-26 with ref 600000000002.", capturedAt: "2026-10-24T10:00:00Z" });
     if (back === 0) list.push({ id: "usd", date: "2026-10-19", merchant: "OPENAI *CHATGPT", bank: "HSBC", account: "1234", currency: "USD",
       amountPaise: -2000, template: "hsbc-cc-spend", confidence: "high", raw: "HSBC Credit Card used at OPENAI", capturedAt: "2026-10-19T10:00:00Z" });
     months[ym] = list.sort((a, b) => (a.date < b.date ? 1 : -1));
@@ -76,7 +83,11 @@
     };
     setTimeout(() => fintrack.reply(replies[message.action] || { ok: false, message: "Unknown action" }), 150);
   };
-  fintrack.load({ months, rules, categories: { Transfers: { emoji: "↔︎", colour: "#8e8e93" } }, unparsed, version: "preview · fake data", currentMonth: "2026-10" });
+  const accounts = [
+    { bank: "SBI", account: { last4: "4321", name: "Savings", upi: ["you.name@sbi"] }, cards: [{ last4: "5678", name: "Cashback", bills: ["SBI CARDS"] }] },
+    { bank: "HSBC", account: { last4: "6001", name: "Savings", upi: ["you@okhsbc"] }, cards: [{ last4: "9012", name: "Premier", bills: ["HSBC CARD"] }] },
+  ];
+  fintrack.load({ months, rules, categories: { Transfers: { emoji: "↔︎", colour: "#8e8e93" } }, accounts, unparsed, version: "preview · fake data", currentMonth: "2026-10" });
 </script>
 </body>
 </html>

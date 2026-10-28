@@ -192,5 +192,10 @@ To do (each needs a real SMS with numbers and names replaced):
 - [ ] Refunds or reversals on either card.
 - [ ] SBI card spend in a foreign currency, if it happens.
 - [ ] Salary or other incoming NEFT/IMPS into HSBC or SBI.
-- [ ] Then: mark self transfers in the templates and leave them out of Spending totals (still listed).
+- [x] Self transfers left out of totals (still listed in See All): **More → My Accounts** (`lib/accounts.js`,
+      `fintrack/data/accounts.json` in iCloud, never in the repo). It matches a counterparty equal to one of your
+      UPI IDs, or money out to a name containing a card's bill name.
+- [ ] SBI's UPI debit SMS gives a person's name, not a UPI ID, so the SBI side of SBI → HSBC is not matched yet.
+      It needs a real SMS to decide how (for example, the name your own HSBC account shows as).
+- [ ] Card "payment received" SMS (SBI Card, HSBC): no template yet. Once there is one, mark it as a self transfer too.
 

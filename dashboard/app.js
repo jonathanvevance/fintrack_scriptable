@@ -1,16 +1,17 @@
 // FinTrack dashboard. Scriptable shows this page in a WebView and calls fintrack.load(data) with
 //   { months: { "YYYY-MM": [tx] }, rules: [rule], categories: { name: { emoji, colour } },
-//     unparsed: [{ id, text }], version, currentMonth: "YYYY-MM" }.
+//     accounts: [bank], unparsed: [{ id, text }], version, currentMonth: "YYYY-MM" }.
 // The page never writes files. Requests go out through fintrack.send({ action, ... }):
-//   save { rules?: [rule], manual?: { ym, id, manual }, categories?: { name: look } }, pasteSms, copy { text }, deleteTx { ym, id },
-//   clearUnparsed, update.
+//   save { rules?: [rule], manual?: { ym, id, manual }, categories?: { name: look }, accounts?: [bank] },
+//   pasteSms, copy { text }, deleteTx { ym, id }, clearUnparsed, update.
 // Scriptable answers fintrack.reply({ ok, title?, message?, data?, ym? }); `data` replaces what
 // fintrack.load gave. Saves are applied here only once the reply says ok.
-// Needs FT.tags (lib/tags.js) and FT.format (lib/format.js) loaded first.
+// Needs FT.tags (lib/tags.js), FT.format (lib/format.js) and FT.accounts (lib/accounts.js) loaded first.
 
 (function () {
   const { compileRules, tagsFor, tagAll, describeRule, patternWords, isPlainPattern, recipientPattern } = FT.tags;
   const { money, monthLabel, shiftMonth, totals, categoryTotals, merchantTotals, recurringPayments } = FT.format;
+  const { checkAccounts, compileAccounts, accountLabel } = FT.accounts;
   const app = document.getElementById("app");
 
   const rupees = (n) => money(Math.round(n * 100));
@@ -115,6 +116,8 @@
     compiled: [],
     categories: {}, // saved looks: { name: { emoji, colour } }
     previewLook: null, // { name, emoji, colour } being picked on the current screen
+    accounts: [], // your own banks (lib/accounts.js)
+    isSelf: () => null,
     unparsed: [],
     version: "",
     ym: null,
@@ -136,7 +139,18 @@
     state.rules = rules;
     state.compiled = compileRules(rules);
   }
-  const monthTx = (ym) => tagAll(state.compiled, state.months[ym] || []);
+  function setAccounts(banks) {
+    state.accounts = banks;
+    state.isSelf = compileAccounts(banks);
+  }
+  // Tagged copies for display. A self transfer gets `self` (why) and no category.
+  const tag = (list) => tagAll(state.compiled, list).map((tx) => {
+    const self = state.isSelf(tx);
+    return self ? { ...tx, self, category: null } : tx;
+  });
+  // What totals, categories and Insights count: everything except self transfers.
+  const counted = (list) => list.filter((tx) => !tx.self);
+  const monthTx = (ym) => tag(state.months[ym] || []);
   const yearMonths = (y) => Array.from({ length: 12 }, (_, i) => `${y}-${String(i + 1).padStart(2, "0")}`);
   const hasMonth = (ym) => (state.months[ym] || []).length > 0;
   // What Spending and its lists show: one month, or every month of state.year, newest first.
@@ -149,7 +163,7 @@
   function knownCategories() {
     const count = new Map();
     for (const rule of state.rules) if (rule.set && rule.set.category) count.set(rule.set.category, (count.get(rule.set.category) || 0) + 1);
-    for (const tx of tagAll(state.compiled, allTx())) if (tx.category) count.set(tx.category, (count.get(tx.category) || 0) + 1);
+    for (const tx of tag(allTx())) if (tx.category) count.set(tx.category, (count.get(tx.category) || 0) + 1);
     for (const name of Object.keys(state.categories)) if (!count.has(name)) count.set(name, 0);
     for (const name of ["Food", "Groceries", "Shopping", "Travel", "Bills", "Subscriptions"]) if (!count.has(name)) count.set(name, 0);
     return [...count].sort((a, b) => b[1] - a[1]).map(([name]) => name);
@@ -161,7 +175,7 @@
     const use = new Map();
     const get = (name) => use.get(name) || use.set(name, { name, rules: 0, tx: 0, hand: 0, paise: 0 }).get(name);
     for (const rule of state.rules) if (rule.set && rule.set.category) get(rule.set.category).rules++;
-    for (const tx of tagAll(state.compiled, allTx())) {
+    for (const tx of tag(allTx())) {
       if (!tx.category) continue;
       const u = get(tx.category);
       u.tx++;
@@ -203,11 +217,13 @@
 
   // ---- Shared pieces ----
 
+  const selfIcon = (cls = "") => `<span class="ic ${cls}" style="background:#8e8e93">↔︎</span>`;
+
   function txRow(tx) {
-    const sub = tx.category ? esc(tx.category) : `<span class="warn">Needs a category</span>`;
+    const sub = tx.self ? "Self transfer" : tx.category ? esc(tx.category) : `<span class="warn">Needs a category</span>`;
     const where = [tx.bank, tx.account ? "··" + tx.account : null].filter(Boolean).join(" ");
     const day = Number(tx.date.slice(8));
-    return `<button class="li" data-act="open-tx" data-ym="${esc(tx.date.slice(0, 7))}" data-id="${esc(tx.id)}">${icon(tx.category)}
+    return `<button class="li" data-act="open-tx" data-ym="${esc(tx.date.slice(0, 7))}" data-id="${esc(tx.id)}">${tx.self ? selfIcon() : icon(tx.category)}
       <div class="main"><div class="t1">${esc(shortName(recipient(tx)))}</div><div class="t2">${sub}${where ? " · " + esc(where) : ""}</div></div>
       <div class="amt ${tx.amountPaise > 0 ? "in" : ""}">${tx.amountPaise > 0 ? "+" : ""}${esc(money(Math.abs(tx.amountPaise), tx.currency))}<small>${day} ${esc(monthName(tx.date.slice(0, 7)))}</small></div></button>`;
   }
@@ -239,7 +255,7 @@
   // Money out per month of year y; tap a bar to open that month.
   function yearBars(y) {
     const yms = yearMonths(y);
-    const spent = yms.map((ym) => (totals(monthTx(ym)).INR || { out: 0 }).out);
+    const spent = yms.map((ym) => (totals(counted(monthTx(ym))).INR || { out: 0 }).out);
     const max = Math.max(1, ...spent);
     return `<div class="bars">${yms.map((ym, i) => `<button data-act="month" data-ym="${ym}" ${hasMonth(ym) ? "" : "disabled"}>
       <div class="b" style="height:${Math.max(2, (spent[i] / max) * 100)}%"></div><div class="l">${monthName(ym)[0]}</div></button>`).join("")}</div>`;
@@ -274,7 +290,7 @@
   }
 
   function spendingView() {
-    const list = periodTx();
+    const list = counted(periodTx());
     const t = totals(list);
     const spent = (t.INR || { out: 0 }).out;
     const received = (t.INR || { in: 0 }).in;
@@ -283,7 +299,7 @@
       const months = yearMonths(state.year).filter(hasMonth).length;
       note = months ? `${money(Math.round(spent / months / 100) * 100)} a month on average · ${plural(months, "month")}` : "";
     } else {
-      const before = (totals(monthTx(shiftMonth(state.ym, -1))).INR || { out: 0 }).out;
+      const before = (totals(counted(monthTx(shiftMonth(state.ym, -1)))).INR || { out: 0 }).out;
       const diff = spent - before;
       note = before ? `${money(Math.abs(diff))} ${diff <= 0 ? "less" : "more"} than ${monthName(shiftMonth(state.ym, -1))}` : "";
     }
@@ -302,18 +318,18 @@
       ${cats.length ? `<div class="sh">Categories</div><div class="group">${categoryRows(list)}</div>` : ""}
       ${untagged ? `<button class="card attention" data-act="open-list" data-filter="untagged">${icon(null)}<div style="flex:1"><div style="font-weight:600">${plural(untagged, "transaction")} need a category</div>
         <div class="muted small">Pick a category and turn on Always; FinTrack remembers.</div></div><span class="chev"></span></button>` : ""}
-      <div class="sh2">Latest ${list.length > 5 ? `<button data-act="open-list" data-filter="all">See All</button>` : ""}</div>
+      <div class="sh2">Latest ${periodTx().length > Math.min(list.length, 5) ? `<button data-act="open-list" data-filter="all">See All</button>` : ""}</div>
       <div class="group">${list.slice(0, 5).map(txRow).join("") || `<div class="empty">No transactions in ${esc(periodLabel())}</div>`}</div>`;
   }
 
   function listView(screen) {
     if (screen.hand) {
-      const shown = tagAll(state.compiled, allTx()).filter((t) => t.manual && t.manual.category === screen.hand).sort((a, b) => (a.date < b.date ? 1 : -1));
+      const shown = tag(allTx()).filter((t) => t.manual && t.manual.category === screen.hand).sort((a, b) => (a.date < b.date ? 1 : -1));
       return `${backNav("Set by Hand")}<div style="height:8px"></div>
       <div class="group">${shown.map(txRow).join("") || `<div class="empty">Nothing here</div>`}</div>`;
     }
     if (screen.merchant) {
-      const all = screen.allTime ? tagAll(state.compiled, allTx()).sort((a, b) => (a.date < b.date ? 1 : -1)) : periodTx();
+      const all = screen.allTime ? tag(allTx()).sort((a, b) => (a.date < b.date ? 1 : -1)) : periodTx();
       const shown = all.filter((t) => recipient(t) === screen.merchant);
       return `${backNav(shortName(screen.merchant))}<div style="height:8px"></div>
       <div class="group">${shown.map(txRow).join("") || `<div class="empty">Nothing here</div>`}</div>`;
@@ -321,8 +337,8 @@
     const list = periodTx();
     const special = {
       all: [periodLabel(), () => true],
-      untagged: ["Needs a Category", (t) => !t.category],
-      received: [`Received · ${periodLabel()}`, (t) => t.amountPaise > 0],
+      untagged: ["Needs a Category", (t) => !t.category && !t.self],
+      received: [`Received · ${periodLabel()}`, (t) => t.amountPaise > 0 && !t.self],
     }[screen.filter];
     const shown = list.filter(special ? special[1] : (t) => t.category === screen.filter);
     const title = special ? special[0] : screen.filter;
@@ -333,31 +349,51 @@
 
   // ---- Transaction detail: pick a category, optionally Always ----
 
+  function txHead(tx, iconHtml) {
+    const when = `${Number(tx.date.slice(8))} ${monthLabel(tx.date.slice(0, 7))}`;
+    return `<div style="text-align:center;padding:6px 16px 18px">${iconHtml}
+        ${tx.merchant ? `<div class="muted small">${tx.amountPaise > 0 ? "Received from" : "Paid to"}</div>` : ""}
+        <div style="font-size:22px;font-weight:700">${esc(recipient(tx))}</div>
+        <div class="big ${tx.amountPaise > 0 && !tx.self ? "in" : ""}" style="font-size:40px">${esc(money(Math.abs(tx.amountPaise), tx.currency))}</div>
+        <div class="muted">${esc([when, tx.bank, tx.account ? "··" + tx.account : null].filter(Boolean).join(" · "))}</div></div>`;
+  }
+
+  function txMessage(tx) {
+    return `<div class="sh">Message</div>
+      <div class="group pad muted small" style="line-height:1.4;user-select:text;-webkit-user-select:text">${esc(tx.raw)}</div>
+      <div class="group">
+        <button class="li plain" data-act="copy-sms"><span class="link">Copy SMS</span></button>
+        <button class="li plain" data-act="delete-tx"><span class="danger">Delete Transaction</span></button></div>`;
+  }
+
+  // Why: "you@okhsbc is your HSBC Savings ··6001" or "SBI CARDS is how your SBI Cashback ··5678 bill shows".
+  function selfView(tx) {
+    const why = tx.self.kind === "upi" ? `<b>${esc(tx.self.match)}</b> is your ${esc(tx.self.label)}.`
+      : `<b>${esc(tx.self.match)}</b> is how your ${esc(tx.self.label)} bill shows.`;
+    return `${backNav("")}${txHead(tx, selfIcon("xl"))}
+      <div class="group"><div class="li plain"><div class="main"><div class="t1">Kind</div></div><span class="val">↔︎ Self Transfer</span></div></div>
+      <div class="sf" style="margin-top:-12px">Not counted as spending or money received: ${why}</div>
+      <div class="group"><button class="li plain" data-act="open-accounts"><span class="link">Open My Accounts</span></button></div>
+      ${txMessage(tx)}`;
+  }
+
   function txView(screen) {
-    const tx = tagAll(state.compiled, [findTx(screen.ym, screen.id)])[0];
+    const tx = tag([findTx(screen.ym, screen.id)])[0];
+    if (tx.self) return selfView(tx);
     const choices = knownCategories();
     if (screen.draft && !choices.includes(screen.draft)) choices.unshift(screen.draft);
     const rows = choices
       .map((name) => `<button class="li" data-act="pick-cat" data-value="${esc(name)}">${icon(name, "sq")}<div class="main"><div class="t1">${esc(name)}</div></div>${screen.draft === name ? `<span class="check">✓</span>` : ""}</button>`)
       .join("");
     const sameMerchant = tx.merchant ? allTx().filter((t) => t.merchant === tx.merchant).length : 0;
-    const when = `${Number(tx.date.slice(8))} ${monthLabel(tx.date.slice(0, 7))}`;
     return `${backNav("", `<button data-act="save-tx"><b>Save</b></button>`)}
-      <div style="text-align:center;padding:6px 16px 18px">${icon(screen.draft, "xl")}
-        ${tx.merchant ? `<div class="muted small">${tx.amountPaise > 0 ? "Received from" : "Paid to"}</div>` : ""}
-        <div style="font-size:22px;font-weight:700">${esc(recipient(tx))}</div>
-        <div class="big ${tx.amountPaise > 0 ? "in" : ""}" style="font-size:40px">${esc(money(Math.abs(tx.amountPaise), tx.currency))}</div>
-        <div class="muted">${esc([when, tx.bank, tx.account ? "··" + tx.account : null].filter(Boolean).join(" · "))}</div></div>
+      ${txHead(tx, icon(screen.draft, "xl"))}
       <div class="sh">Category</div>
       <div class="group">${rows}
         <button class="li plain" data-act="open-categories"><span class="link">Manage Categories…</span></button></div>
       ${tx.merchant ? `<div class="group"><button class="li plain" data-act="toggle-always"><div class="main"><div class="t1" style="white-space:normal">Always put ${esc(shortName(tx.merchant))} in ${esc(screen.draft || "…")}</div>
           <div class="t2">Applies to ${plural(sameMerchant, "transaction")} now and every future one</div></div><span class="toggle ${screen.always ? "on" : ""}"></span></button></div>` : ""}
-      <div class="sh">Message</div>
-      <div class="group pad muted small" style="line-height:1.4;user-select:text;-webkit-user-select:text">${esc(tx.raw)}</div>
-      <div class="group">
-        <button class="li plain" data-act="copy-sms"><span class="link">Copy SMS</span></button>
-        <button class="li plain" data-act="delete-tx"><span class="danger">Delete Transaction</span></button></div>`;
+      ${txMessage(tx)}`;
   }
 
   function saveTx(screen) {
@@ -404,7 +440,13 @@
 
   function moreView() {
     const review = state.unparsed.length + toCheck().length;
+    const owned = state.accounts.filter((b) => b.account).length;
+    const cards = state.accounts.reduce((n, b) => n + (b.cards || []).length, 0);
+    const summary = owned || cards ? `${plural(owned, "bank account")} · ${plural(cards, "card")}` : "Not set up";
     return `<div class="large first">More</div>
+      <div class="sh">You</div>
+      <div class="group"><button class="li plain" data-act="open-accounts"><div class="main"><div class="t1">My Accounts</div><div class="t2">${esc(summary)}</div></div><span class="chev"></span></button></div>
+      <div class="sf">Payments between these are self transfers and aren't counted as spending.</div>
       <div class="sh">Add</div>
       <div class="group"><button class="li plain" data-act="paste-sms"><span class="link">Add SMS from Clipboard</span></button></div>
       <div class="sf">Copy a bank SMS in Messages first. It is saved the same way the automation would.</div>
@@ -429,6 +471,133 @@
     return `${backNav("Unrecognised", state.unparsed.length ? `<button data-act="clear-unparsed">Clear</button>` : "")}<div style="height:8px"></div>
       <div class="group">${rows || `<div class="empty">Nothing unrecognised</div>`}</div>
       ${rows ? `<div class="sf" style="margin-top:-12px">Tap a message to copy it.</div>` : ""}`;
+  }
+
+  // ---- My Accounts: your banks, each with an optional account (plus UPI IDs) and cards ----
+
+  const KNOWN_BANKS = ["SBI", "HSBC", "ICICI"];
+  const BANK_COLOURS = { SBI: "#007aff", HSBC: "#ff3b30", ICICI: "#ff9500" };
+  const bankIcon = (bank, glyph = "🏦", cls = "") => `<span class="ic ${cls}" style="background:${BANK_COLOURS[bank] || "#8e8e93"}">${glyph}</span>`;
+  const hasBank = (name) => state.accounts.some((b) => b.bank.toLowerCase() === name.toLowerCase());
+  const copyOf = (value) => JSON.parse(JSON.stringify(value));
+
+  function accountsView() {
+    const openBank = (i, glyph, title, sub) => `<button class="li" data-act="open-bank" data-i="${i}">${bankIcon(state.accounts[i].bank, glyph)}
+      <div class="main"><div class="t1">${esc(title)}</div><div class="t2">${esc(sub)}</div></div><span class="chev"></span></button>`;
+    const banks = state.accounts.map((b, i) => (b.account ? openBank(i, "🏦", accountLabel(b.bank, b.account), plural(b.account.upi.length, "UPI ID"))
+      : (b.cards || []).length ? "" : openBank(i, "🏦", b.bank, "No account or card yet"))).join("");
+    const cards = state.accounts.map((b, i) => (b.cards || [])
+      .map((c) => openBank(i, "💳", accountLabel(b.bank, c), c.bills.length ? `Bill shows as ${c.bills.join(", ")}` : "No bill name yet")).join("")).join("");
+    return `${backNav("", `<button data-act="add-bank" style="font-size:26px;line-height:1">＋</button>`)}
+      <div class="large">My Accounts</div>
+      ${banks ? `<div class="sh">Bank accounts</div><div class="group">${banks}</div>` : ""}
+      ${cards ? `<div class="sh">Cards</div><div class="group">${cards}</div>` : ""}
+      ${banks || cards ? "" : `<div class="group"><div class="empty">Add the banks you use with ＋.</div></div>`}
+      <div class="sf">Payments to or from your UPI IDs, and card bill payments, are self transfers: not counted as spending or money received.
+        Saved in FinTrack's iCloud folder with your transactions, never in the FinTrack code.</div>`;
+  }
+
+  function addBankView(screen) {
+    const rows = KNOWN_BANKS.map((name) => (hasBank(name)
+      ? `<div class="li plain" style="opacity:.4"><div class="main"><div class="t1">${name}</div></div><span class="val small">Added</span></div>`
+      : `<button class="li plain" data-act="pick-bank" data-value="${name}"><div class="main"><div class="t1">${name}</div></div><span class="chev"></span></button>`)).join("");
+    return `${backNav("Add Bank")}<div style="height:8px"></div>
+      <div class="group">${rows}</div>
+      <div class="sh">Other bank</div>
+      <div class="group"><div class="li plain"><input class="left" data-field="otherInput" value="${esc(screen.otherInput)}" placeholder="Bank name" autocapitalize="characters" autocorrect="off">
+        <button class="link" data-act="add-other-bank">Add</button></div></div>
+      <div class="sf">FinTrack reads SMS from SBI, HSBC and ICICI. Another bank's SMS needs a new template first.</div>`;
+  }
+
+  // Removable chips plus an input with Add; `items` is the list, `input` the screen key being typed.
+  function chipList(items, removeAct, input, value, addAct, placeholder) {
+    const chips = items.map((w, i) => `<span class="namechip">${esc(w)}<button data-act="${removeAct}" data-i="${i}">×</button></span>`).join("");
+    return `${chips ? `<div class="namechips">${chips}</div>` : ""}
+      <div class="li plain"><input class="left" data-field="${input}" value="${esc(value)}" placeholder="${esc(items.length ? "Add another" : placeholder)}" autocapitalize="off" autocorrect="off">
+        <button class="link" data-act="${addAct}">Add</button></div>`;
+  }
+
+  const last4Input = (value) => `<input data-field="last4" value="${esc(value)}" placeholder="1234" inputmode="numeric" maxlength="4">`;
+
+  // screen: { index (null until saved), draft: bank, upiInput }
+  function bankView(screen) {
+    const d = screen.draft;
+    const cards = d.cards.map((c, i) => `<button class="li" data-act="open-card" data-i="${i}">${bankIcon(d.bank, "💳")}
+      <div class="main"><div class="t1">${esc(accountLabel("", c).trim())}</div><div class="t2">${esc(c.bills.length ? `Bill shows as ${c.bills.join(", ")}` : "No bill name yet")}</div></div><span class="chev"></span></button>`).join("");
+    const sub = [d.account ? "1 account" : "No account", d.account ? plural(d.account.upi.length, "UPI ID") : "", plural(d.cards.length, "card")].filter(Boolean).join(" · ");
+    const account = d.account ? `<div class="group">
+        <div class="li plain"><span>Last 4 digits</span>${last4Input(d.account.last4)}</div>
+        <div class="li plain"><span>Name</span><input data-field="accountName" value="${esc(d.account.name)}" placeholder="e.g. Savings" autocapitalize="words"></div></div>
+      <div class="sh">UPI IDs on this account</div>
+      <div class="group">${chipList(d.account.upi, "remove-upi", "upiInput", screen.upiInput, "add-upi", "e.g. name@okhsbc")}</div>
+      <div class="sf">Money sent to or received from these counts as a self transfer. Each UPI app can give the account its own ID; add them all.</div>
+      <div class="group"><button class="li plain" data-act="remove-account"><span class="danger">Remove Account</span></button></div>`
+      : `<div class="group"><button class="li plain" data-act="add-account"><span class="link">Add Account</span></button></div>
+      <div class="sf" style="margin-top:-12px">Leave this empty if you only have a card with ${esc(d.bank)}. UPI IDs go with the account.</div>`;
+    return `${backNav("", `<button data-act="save-bank"><b>Done</b></button>`)}
+      <div style="text-align:center;padding:6px 16px 18px">${bankIcon(d.bank, "🏦", "xl")}
+        <div style="font-size:22px;font-weight:700">${esc(d.bank)}</div><div class="muted small">${esc(sub)}</div></div>
+      <div class="sh">Account</div>${account}
+      <div class="sh">Cards</div>
+      <div class="group">${cards}<button class="li plain" data-act="add-card"><span class="link">Add Card</span></button></div>
+      ${screen.index != null ? `<div class="group"><button class="li plain" data-act="delete-bank"><span class="danger">Delete ${esc(d.bank)}</span></button></div>` : ""}`;
+  }
+
+  // screen: { cardIndex (null for a new card), draft: card, billInput }. Saving also saves its bank.
+  function cardView(screen) {
+    const d = screen.draft;
+    const bank = state.stack[state.stack.length - 2].draft.bank;
+    return `<div class="nav"><button data-act="back">Cancel</button><span class="mid">${esc(screen.cardIndex == null ? "New Card" : accountLabel("", d).trim())}</span><button class="end" data-act="save-card"><b>Save</b></button></div>
+      <div style="height:8px"></div>
+      <div class="sh">${esc(bank)} card</div>
+      <div class="group">
+        <div class="li plain"><span>Last 4 digits</span>${last4Input(d.last4)}</div>
+        <div class="li plain"><span>Name</span><input data-field="name" value="${esc(d.name)}" placeholder="e.g. Cashback" autocapitalize="words"></div></div>
+      <div class="sh">Bill payment shows as</div>
+      <div class="group">${chipList(d.bills, "remove-bill", "billInput", screen.billInput, "add-bill", "e.g. SBI CARDS")}</div>
+      <div class="sf">The name your bank's SMS gives when you pay this card's bill. Paying a name that contains it counts as a self transfer, so the card's purchases aren't counted twice. Capital letters don't matter.</div>
+      ${screen.cardIndex != null ? `<div class="group"><button class="li plain" data-act="delete-card"><span class="danger">Delete Card</span></button></div>` : ""}`;
+  }
+
+  // The bank as it would be saved: trimmed, with a UPI ID typed but not yet added included.
+  function bankFromScreen(screen) {
+    const d = copyOf(screen.draft);
+    if (d.account) {
+      d.account.last4 = d.account.last4.trim();
+      d.account.name = d.account.name.trim();
+      d.account.upi = withTyped(d.account.upi, screen.upiInput || "");
+    }
+    return d;
+  }
+
+  // Saves the whole list with `bank` at `index` (appended when null), or without it when bank is null.
+  function saveAccounts(index, bank, title, detail, options = {}) {
+    const next = state.accounts.slice();
+    if (bank == null) next.splice(index, 1);
+    else if (index == null) next.push(bank);
+    else next[index] = bank;
+    try {
+      checkAccounts(next);
+    } catch (e) {
+      return showDialog("Can't save yet", String(e.message || e));
+    }
+    commit({ accounts: next }, title, detail, options);
+  }
+
+  function saveCard(screen, remove = false) {
+    const parent = state.stack[state.stack.length - 2];
+    const bank = bankFromScreen(parent);
+    const card = { last4: screen.draft.last4.trim(), name: screen.draft.name.trim(), bills: withTyped(screen.draft.bills, screen.billInput) };
+    if (remove) bank.cards.splice(screen.cardIndex, 1);
+    else if (screen.cardIndex == null) bank.cards.push(card);
+    else bank.cards[screen.cardIndex] = card;
+    const index = parent.index;
+    const after = () => {
+      parent.draft = bank;
+      parent.upiInput = "";
+      if (parent.index == null) parent.index = state.accounts.length - 1;
+    };
+    saveAccounts(index, bank, remove ? "Card deleted" : "Card saved", `${accountLabel(bank.bank, remove ? screen.draft : card)} is ${remove ? "gone" : "saved"}.`, { pop: true, after });
   }
 
   // ---- Trends tab: Trends | Recurring | Recipients ----
@@ -504,7 +673,7 @@
   function recurringList() {
     const today = todayIso();
     const day = Number(today.slice(8));
-    const items = recurringPayments(tagAll(state.compiled, allTx()), today);
+    const items = recurringPayments(counted(tag(allTx())), today);
     if (!items.length) return `<div class="group"><div class="empty">Nothing repeats yet.</div></div>
       <div class="sf">A payment shows up here once FinTrack sees it in two months, around the same day and amount.</div>`;
     const monthly = items.reduce((s, r) => s + r.paise, 0);
@@ -542,7 +711,7 @@
   }
 
   function merchantBubbles() {
-    const list = merchantTotals(periodTx());
+    const list = merchantTotals(counted(periodTx()));
     if (!list.length) return `${monthStrip()}<div class="group"><div class="empty">No spending in ${esc(periodLabel())}</div></div>`;
     const picked = list.find((m) => m.merchant === state.bubble) || list[0];
     const circles = packBubbles(list.slice(0, 14));
@@ -763,7 +932,7 @@
       return `<div class="sh danger" style="text-transform:none">${esc(cleanError(e))}</div>`;
     }
     if (!Object.keys(rule.when).length) return `<div class="sh" style="text-transform:none">Add a condition to see what this rule matches.</div>`;
-    const hits = tagAll(state.compiled, allTx().filter(compileRules([rule])[0].matches)).sort((a, b) => (a.date < b.date ? 1 : -1));
+    const hits = tag(allTx().filter(compileRules([rule])[0].matches)).sort((a, b) => (a.date < b.date ? 1 : -1));
     const more = hits.length > 5 ? `<div class="li plain"><span class="muted">+${hits.length - 5} more</span></div>` : "";
     return `<div class="sh">Matches ${plural(hits.length, "transaction")}</div><div class="group">${hits.slice(0, 5).map(txRow).join("")}${more}</div>`;
   }
@@ -834,6 +1003,7 @@
     const undo = {};
     if (payload.rules) undo.rules = state.rules;
     if (payload.categories) undo.categories = state.categories;
+    if (payload.accounts) undo.accounts = state.accounts;
     if (payload.manual) {
       const before = (m) => ({ ...m, manual: (findTx(m.ym, m.id) || {}).manual || {} });
       undo.manual = Array.isArray(payload.manual) ? payload.manual.map(before) : before(payload.manual);
@@ -853,6 +1023,7 @@
     state.unparsed = data.unparsed || [];
     state.version = data.version || "";
     state.categories = data.categories || {};
+    setAccounts(data.accounts || []);
     setRules(data.rules || []);
   }
 
@@ -878,17 +1049,21 @@
     const before = txs.map((tx) => JSON.stringify(tagsFor(state.compiled, tx)));
     if (p.payload.rules) setRules(p.payload.rules);
     if (p.payload.categories) state.categories = p.payload.categories;
+    if (p.payload.accounts) setAccounts(p.payload.accounts);
     for (const m of [].concat(p.payload.manual || [])) {
       const tx = findTx(m.ym, m.id);
       if (tx) tx.manual = m.manual;
     }
     const changed = txs.filter((tx, i) => JSON.stringify(tagsFor(state.compiled, tx)) !== before[i]).length;
     state.stack.length = Math.max(0, state.stack.length - (p.pop === true ? 1 : p.pop || 0));
+    // An undone accounts change leaves any open bank or card page out of date.
+    if (p.isUndo && p.payload.accounts) state.stack = state.stack.slice(0, state.stack.findIndex((s) => s.type === "accounts") + 1);
     if (p.after) p.after();
     if (!p.quiet) {
+      const selfCount = txs.filter((tx) => state.isSelf(tx)).length;
       state.dialog = {
         title: p.title,
-        text: `${p.detail}\n${plural(changed, "transaction")} changed category.`,
+        text: `${p.detail}\n${p.payload.accounts ? `${plural(selfCount, "self transfer")} across all your transactions.` : `${plural(changed, "transaction")} changed category.`}`,
         actions: p.isUndo ? [["OK", "close"]] : [["Undo", "undo"], ["OK", "close"]],
         undo: p.undo,
       };
@@ -925,7 +1100,8 @@
     }
     const screen = top();
     state.previewLook = (screen && screen.newLook) || null;
-    const views = { tx: txView, list: listView, rule: ruleView, unparsed: unparsedView, categories: categoriesView, category: categoryView, merge: mergeView };
+    const views = { tx: txView, list: listView, rule: ruleView, unparsed: unparsedView, categories: categoriesView, category: categoryView, merge: mergeView,
+      accounts: accountsView, "add-bank": addBankView, bank: bankView, card: cardView };
     let body = screen ? views[screen.type](screen) : { spending: spendingView, trends: trendsView, rules: rulesView, more: moreView }[state.tab]();
     if (!screen && state.tab !== "rules" && state.tabHistory.length) body = `<div class="nav">${tabBack()}<span class="mid"></span><span class="end"></span></div>${body}`;
     const tabs = screen ? "" : `<nav class="tabbar">${["spending", "trends", "rules", "more"]
@@ -969,7 +1145,7 @@
     back,
     "open-list": (el) => push({ type: "list", filter: el.dataset.filter }),
     "open-tx": (el) => {
-      const tx = tagAll(state.compiled, [findTx(el.dataset.ym, el.dataset.id)])[0];
+      const tx = tag([findTx(el.dataset.ym, el.dataset.id)])[0];
       push({ type: "tx", ym: el.dataset.ym, id: tx.id, draft: tx.category, always: false });
     },
     "pick-cat": (el) => { top().draft = el.dataset.value; render(); },
@@ -1071,6 +1247,67 @@
     "clear-unparsed": () => showDialog("Clear Unrecognised?", `${plural(state.unparsed.length, "message")} will be removed.`, [["Cancel", "close"], ["Clear", "clear-confirm", true]]),
     "clear-confirm": () => { state.dialog = null; render(); request("clearUnparsed", {}, { pop: true }); },
     update: () => request("update"),
+    "open-accounts": () => push({ type: "accounts" }),
+    "add-bank": () => push({ type: "add-bank", otherInput: "" }),
+    "pick-bank": (el) => {
+      state.stack.pop();
+      push({ type: "bank", index: null, draft: { bank: el.dataset.value, account: null, cards: [] }, upiInput: "" });
+    },
+    "add-other-bank": () => {
+      const name = top().otherInput.trim();
+      if (!name) return showDialog("Name needed", "Type the bank's name.");
+      if (hasBank(name)) return showDialog("Already added", `${name} is already in My Accounts.`);
+      actions["pick-bank"]({ dataset: { value: name } });
+    },
+    "open-bank": (el) => {
+      const bank = copyOf(state.accounts[Number(el.dataset.i)]);
+      push({ type: "bank", index: Number(el.dataset.i), draft: { ...bank, cards: bank.cards || [] }, upiInput: "" });
+    },
+    "add-account": () => { top().draft.account = { last4: "", name: "", upi: [] }; render(); },
+    "remove-account": () => { top().draft.account = null; top().upiInput = ""; render(); },
+    "add-upi": () => {
+      const s = top();
+      const id = s.upiInput.trim();
+      if (id && !s.draft.account.upi.some((u) => u.toLowerCase() === id.toLowerCase())) s.draft.account.upi.push(id);
+      s.upiInput = "";
+      render();
+      const box = app.querySelector('[data-field="upiInput"]');
+      if (box) box.focus();
+    },
+    "remove-upi": (el) => { top().draft.account.upi.splice(Number(el.dataset.i), 1); render(); },
+    "save-bank": () => {
+      const s = top();
+      const bank = bankFromScreen(s);
+      saveAccounts(s.index, bank, "Saved", `${bank.bank} is saved.`, { pop: true });
+    },
+    "delete-bank": () => {
+      const name = top().draft.bank;
+      showDialog(`Delete ${name}?`, "Its account, UPI IDs and cards are removed from My Accounts. Payments to and from them count as spending again.",
+        [["Cancel", "close"], ["Delete", "delete-bank-confirm", true]]);
+    },
+    "delete-bank-confirm": () => {
+      state.dialog = null;
+      saveAccounts(top().index, null, "Bank deleted", `${top().draft.bank} is gone.`, { pop: true });
+    },
+    "open-card": (el) => {
+      const i = Number(el.dataset.i);
+      push({ type: "card", cardIndex: i, draft: copyOf(top().draft.cards[i]), billInput: "" });
+    },
+    "add-card": () => push({ type: "card", cardIndex: null, draft: { last4: "", name: "", bills: [] }, billInput: "" }),
+    "add-bill": () => {
+      const s = top();
+      const name = s.billInput.trim();
+      if (name && !s.draft.bills.some((b) => b.toLowerCase() === name.toLowerCase())) s.draft.bills.push(name);
+      s.billInput = "";
+      render();
+      const box = app.querySelector('[data-field="billInput"]');
+      if (box) box.focus();
+    },
+    "remove-bill": (el) => { top().draft.bills.splice(Number(el.dataset.i), 1); render(); },
+    "save-card": () => saveCard(top()),
+    "delete-card": () => showDialog("Delete Card?", `${accountLabel("", top().draft).trim()} is removed. Paying its bill counts as spending again.`,
+      [["Cancel", "close"], ["Delete", "delete-card-confirm", true]]),
+    "delete-card-confirm": () => { state.dialog = null; saveCard(top(), true); },
   };
 
   app.addEventListener("click", (e) => {
@@ -1082,7 +1319,15 @@
     const name = e.target.dataset && e.target.dataset.field;
     const screen = top();
     if (!name || !screen) return;
-    if (screen.type === "category") screen[name] = e.target.value;
+    if (screen.type === "category" || screen.type === "add-bank") screen[name] = e.target.value;
+    if (screen.type === "bank") {
+      if (name === "upiInput") screen.upiInput = e.target.value;
+      else screen.draft.account[name === "accountName" ? "name" : name] = e.target.value;
+    }
+    if (screen.type === "card") {
+      if (name === "billInput") screen.billInput = e.target.value;
+      else screen.draft[name] = e.target.value;
+    }
     if (screen.type === "rule") {
       screen.fields[name] = e.target.value;
       document.getElementById("preview").innerHTML = previewHtml(screen);
@@ -1099,14 +1344,14 @@
     render();
   });
 
-  const ENTER_ADDS = { recipientInput: "add-word", wordInput: "add-word" };
+  // Enter in a list's input works like its Add button: [action, list].
+  const ENTER_ADDS = { recipientInput: ["add-word", "recipients"], wordInput: ["add-word", "words"], upiInput: ["add-upi"], billInput: ["add-bill"], otherInput: ["add-other-bank"] };
   app.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && e.target.dataset && e.target.dataset.field === "nameInput") return e.target.blur();
-    const act = e.key === "Enter" && e.target.dataset && ENTER_ADDS[e.target.dataset.field];
-    if (!act) return;
+    const add = e.key === "Enter" && e.target.dataset && ENTER_ADDS[e.target.dataset.field];
+    if (!add) return;
     e.preventDefault();
-    const list = e.target.dataset.field === "wordInput" ? "words" : "recipients";
-    actions[act]({ dataset: { list } });
+    actions[add[0]]({ dataset: { list: add[1] } });
   });
 
   function load(data) {

@@ -11,6 +11,7 @@ function load(path) {
 const { parseSms, parseDate } = load("lib/parse.js");
 const { money, shiftMonth, totals, categoryTotals, merchantTotals, recurringPayments } = load("lib/format.js");
 const { compileRules, tagsFor, tagAll, describeRule, patternWords, isPlainPattern, recipientPattern } = load("lib/tags.js");
+const { checkAccounts, compileAccounts, accountLabel } = load("lib/accounts.js");
 
 let failures = 0;
 let count = 0;
@@ -331,6 +332,32 @@ eq("recurring: day moves too much", recurring([pay("Uber", "2026-09-02", 200), p
 eq("recurring: stopped two months ago", recurring([pay("Hotstar", "2026-06-10", 299), pay("Hotstar", "2026-07-10", 299), pay("Hotstar", "2026-08-10", 299)]), []);
 eq("recurring: bill that varies a little", recurringPayments([pay("BESCOM", "2026-09-18", 1700), pay("BESCOM", "2026-10-17", 1900)], "2026-10-28")[0].varies, true);
 eq("recurring: sorted by day", recurring([pay("B", "2026-09-20", 10), pay("B", "2026-10-20", 10), pay("A", "2026-09-02", 10), pay("A", "2026-10-02", 10)]), ["A", "B"]);
+
+// Made-up accounts; real ones live only in fintrack/data/accounts.json.
+const MINE = [
+  { bank: "SBI", account: { last4: "4321", name: "Savings", upi: ["you.name@sbi"] }, cards: [{ last4: "5678", name: "Cashback", bills: ["SBI CARDS"] }] },
+  { bank: "HSBC", account: null, cards: [{ last4: "9012", name: "", bills: ["HSBC CARD"] }] },
+];
+const isSelf = compileAccounts(MINE);
+eq("self: received from your UPI ID (any case)", isSelf(tx({ merchant: "You.Name@SBI", amountPaise: 2000000 })), { kind: "upi", match: "you.name@sbi", label: "SBI Savings ··4321" });
+eq("self: paid to your UPI ID", isSelf(tx({ merchant: "you.name@sbi", amountPaise: -100 })).kind, "upi");
+eq("self: UPI ID must be the whole name", isSelf(tx({ merchant: "notyou.name@sbi" })), null);
+eq("self: card bill name contained in payee", isSelf(tx({ merchant: "SBI Cards and Payment Services" })), { kind: "bill", match: "SBI CARDS", label: "SBI Cashback ··5678" });
+eq("self: card without a name", isSelf(tx({ merchant: "HSBC CARD PAYMENT" })).label, "HSBC ··9012");
+eq("self: money in from a bill name is not a bill payment", isSelf(tx({ merchant: "SBI CARDS", amountPaise: 500 })), null);
+eq("self: someone else", isSelf(tx({ merchant: "RAHUL KUMAR" })), null);
+eq("self: no name", isSelf(tx({ merchant: null })), null);
+eq("self: nothing listed", compileAccounts([])(tx({ merchant: "you.name@sbi" })), null);
+const accountsError = (list) => { try { checkAccounts(list); return null; } catch (e) { return e.message; } };
+eq("accounts: valid list", accountsError(MINE), null);
+eq("accounts: bank with nothing yet is fine", accountsError([{ bank: "ICICI", account: null, cards: [] }]), null);
+eq("accounts: same bank twice", accountsError([{ bank: "SBI", account: null, cards: [] }, { bank: "sbi", account: null, cards: [] }]), "sbi is listed twice");
+eq("accounts: last 4 must be 4 digits", accountsError([{ bank: "SBI", account: { last4: "12", name: "", upi: [] }, cards: [] }]), "SBI account: last 4 digits must be 4 digits");
+eq("accounts: card last 4", accountsError([{ bank: "SBI", account: null, cards: [{ last4: "", name: "", bills: [] }] }]), "SBI card: last 4 digits must be 4 digits");
+eq("accounts: UPI ID needs @", accountsError([{ bank: "SBI", account: { last4: "1234", name: "", upi: ["9876543210"] }, cards: [] }]), "9876543210 is not a UPI ID (like name@bank)");
+eq("accounts: empty bill name", accountsError([{ bank: "SBI", account: null, cards: [{ last4: "1234", name: "", bills: [" "] }] }]), "Bill name is empty");
+eq("accounts: not a list", accountsError({}), "accounts must be a list");
+eq("accountLabel", accountLabel("HSBC", { last4: "6001", name: "Savings" }), "HSBC Savings ··6001");
 
 print(failures ? `[PROGRESS] ${failures}/${count} tests failed` : `[PROGRESS] All ${count} tests passed`);
 if (failures) throw new Error("tests failed");

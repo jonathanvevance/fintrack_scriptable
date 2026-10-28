@@ -5,6 +5,7 @@
     { "src": "lib/store.js", "dest": "fintrack/lib/store.js" },
     { "src": "lib/capture.js", "dest": "fintrack/lib/capture.js" },
     { "src": "lib/tags.js", "dest": "fintrack/lib/tags.js" },
+    { "src": "lib/accounts.js", "dest": "fintrack/lib/accounts.js" },
     { "src": "lib/dashboard.js", "dest": "fintrack/lib/dashboard.js" },
     { "src": "dashboard/index.html", "dest": "fintrack/dashboard/index.html" },
     { "src": "dashboard/style.css", "dest": "fintrack/dashboard/style.css" },
