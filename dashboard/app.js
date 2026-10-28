@@ -487,19 +487,20 @@
   const hasBank = (name) => state.accounts.some((b) => b.bank.toLowerCase() === name.toLowerCase());
   const copyOf = (value) => JSON.parse(JSON.stringify(value));
 
-  function accountsView() {
-    const openBank = (i, glyph, title, sub) => `<button class="li" data-act="open-bank" data-i="${i}">${bankIcon(state.accounts[i].bank, glyph)}
+  const navRow = (act, i, icon, title, sub) => `<button class="li" data-act="${act}" data-i="${i}">${icon}
       <div class="main"><div class="t1">${esc(title)}</div><div class="t2">${esc(sub)}</div></div><span class="chev"></span></button>`;
-    const sections = state.accounts.map((b, i) => {
-      const rows = (b.account ? openBank(i, "🏦", accountLabel("", b.account).trim(),
-        [plural(b.account.upi.length, "UPI ID"), (b.account.names || []).length ? plural(b.account.names.length, "name") : ""].filter(Boolean).join(" · ")) : "") +
-        (b.cards || []).map((c) => openBank(i, "💳", accountLabel("", c).trim(), c.bills.length ? `Bill shows as ${c.bills.join(", ")}` : "No bill name yet")).join("");
-      return `<div class="sh">${esc(b.bank)}</div><div class="group">${rows || openBank(i, "🏦", b.bank, "No account or card yet")}</div>`;
-    }).join("");
-    return `${backNav("", `<button data-act="add-bank" style="font-size:26px;line-height:1">＋</button>`)}
+  const accountSub = (a) => [plural(a.upi.length, "UPI ID"), (a.names || []).length ? plural(a.names.length, "name") : ""].filter(Boolean).join(" · ");
+  const cardSub = (c) => (c.bills.length ? `Bill shows as ${c.bills.join(", ")}` : "No bill name yet");
+  // "Savings ··4321 · 1 card", "No account · 2 cards".
+  const bankSub = (b) => [b.account ? accountLabel("", b.account).trim() : "No account", plural((b.cards || []).length, "card")].join(" · ");
+
+  // One row per bank; its account and cards are on the bank's page.
+  function accountsView() {
+    const rows = state.accounts.map((b, i) => navRow("open-bank", i, bankIcon(b.bank, "🏛️"), b.bank, bankSub(b))).join("");
+    return `${backNav("")}
       <div class="large">My Accounts</div>
-      ${sections || `<div class="group"><div class="empty">Add the banks you use with ＋.</div></div>`}
-      <div class="sf">Payments to or from your UPI IDs, and card bill payments, are self transfers: not counted as spending or money received.
+      <div class="group">${rows}<button class="li plain" data-act="add-bank"><span class="link">Add Bank</span></button></div>
+      <div class="sf">Payments between your own accounts, and card bill payments, are self transfers: not counted as spending or money received.
         Saved in FinTrack's iCloud folder with your transactions, never in the FinTrack code.</div>`;
   }
 
@@ -529,40 +530,55 @@
 
   const last4Input = (value) => `<input data-field="last4" value="${esc(value)}" placeholder="1234" inputmode="numeric" maxlength="4">`;
 
-  // screen: { index (null until saved), draft: bank, upiInput }
+  // screen: { index (null until its first account or card is saved), draft: bank }. Nothing is edited
+  // here; the account and each card open their own page, which saves the bank.
   function bankView(screen) {
     const d = screen.draft;
-    const cards = d.cards.map((c, i) => `<button class="li" data-act="open-card" data-i="${i}">${bankIcon(d.bank, "💳")}
-      <div class="main"><div class="t1">${esc(accountLabel("", c).trim())}</div><div class="t2">${esc(c.bills.length ? `Bill shows as ${c.bills.join(", ")}` : "No bill name yet")}</div></div><span class="chev"></span></button>`).join("");
-    const sub = [d.account ? "1 account" : "No account", d.account ? plural(d.account.upi.length, "UPI ID") : "",
-      d.account && d.account.names.length ? plural(d.account.names.length, "name") : "", plural(d.cards.length, "card")].filter(Boolean).join(" · ");
-    const account = d.account ? `<div class="group">
-        <div class="li plain"><span>Last 4 digits</span>${last4Input(d.account.last4)}</div>
-        <div class="li plain"><span>Name</span><input data-field="accountName" value="${esc(d.account.name)}" placeholder="e.g. Savings" autocapitalize="words"></div></div>
-      <div class="sh">UPI IDs on this account</div>
-      <div class="group">${rowList(screen, d.account.upi, "upi", "Add UPI ID", "e.g. name@okhsbc")}</div>
-      <div class="sf">Money sent to or received from these counts as a self transfer. Each UPI app can give the account its own ID; add them all.</div>
-      <div class="sh">Name shown when paid</div>
-      <div class="group">${rowList(screen, d.account.names, "payee", "Add Name", "e.g. A KUMAR")}</div>
-      <div class="sf">The name another bank's SMS gives when you pay this account, such as SBI's "trf to …". The whole name must match; capital letters don't matter.</div>
-      <div class="group"><button class="li plain" data-act="remove-account"><span class="danger">Remove Account</span></button></div>`
-      : `<div class="group"><button class="li plain" data-act="add-account"><span class="link">Add Account</span></button></div>
-      <div class="sf" style="margin-top:-12px">Leave this empty if you only have a card with ${esc(d.bank)}. UPI IDs go with the account.</div>`;
-    return `${backNav("", `<button data-act="save-bank"><b>Done</b></button>`)}
-      <div style="text-align:center;padding:6px 16px 18px">${bankIcon(d.bank, "🏦", "xl")}
-        <div style="font-size:22px;font-weight:700">${esc(d.bank)}</div><div class="muted small">${esc(sub)}</div></div>
-      <div class="sh">Account</div>${account}
+    const account = d.account
+      ? navRow("open-account", 0, bankIcon(d.bank, "🏦"), accountLabel("", d.account).trim(), accountSub(d.account))
+      : `<button class="li plain" data-act="add-account"><span class="link">Add Bank Account</span></button>`;
+    const cards = d.cards.map((c, i) => navRow("open-card", i, bankIcon(d.bank, "💳"), accountLabel("", c).trim(), cardSub(c))).join("");
+    return `${backNav("")}
+      <div style="text-align:center;padding:6px 16px 18px">${bankIcon(d.bank, "🏛️", "xl")}
+        <div style="font-size:22px;font-weight:700">${esc(d.bank)}</div><div class="muted small">${esc(bankSub(d))}</div></div>
+      <div class="sh">Bank account</div>
+      <div class="group">${account}</div>
+      ${d.account ? "" : `<div class="sf" style="margin-top:-12px">Leave this out if you only have a card with ${esc(d.bank)}.</div>`}
       <div class="sh">Cards</div>
       <div class="group">${cards}<button class="li plain" data-act="add-card"><span class="link">Add Card</span></button></div>
-      ${screen.index != null ? `<div class="group"><button class="li plain" data-act="delete-bank"><span class="danger">Delete ${esc(d.bank)}</span></button></div>` : ""}`;
+      ${screen.index != null
+        ? `<div class="group"><button class="li plain" data-act="delete-bank"><span class="danger">Delete ${esc(d.bank)}</span></button></div>`
+        : `<div class="sf">${esc(d.bank)} is saved once you add its account or a card.</div>`}`;
+  }
+
+  const editNav = (title, act) => `<div class="nav"><button data-act="back">Cancel</button><span class="mid">${esc(title)}</span><button class="end" data-act="${act}"><b>Save</b></button></div>
+      <div style="height:8px"></div>`;
+  const parentBank = () => state.stack[state.stack.length - 2];
+
+  // screen: { isNew, draft: account, upiInput, payeeInput }. Saving also saves its bank.
+  function accountView(screen) {
+    const d = screen.draft;
+    const bank = parentBank().draft.bank;
+    return `${editNav(screen.isNew ? "New Account" : accountLabel("", d).trim(), "save-account")}
+      <div class="sh">${esc(bank)} account</div>
+      <div class="group">
+        <div class="li plain"><span>Last 4 digits</span>${last4Input(d.last4)}</div>
+        <div class="li plain"><span>Name</span><input data-field="name" value="${esc(d.name)}" placeholder="e.g. Savings" autocapitalize="words"></div></div>
+      <div class="sh">UPI IDs on this account</div>
+      <div class="group">${rowList(screen, d.upi, "upi", "Add UPI ID", "e.g. name@okhsbc")}</div>
+      <div class="sf">Money sent to or received from these counts as a self transfer. Each UPI app can give the account its own ID; add them all.</div>
+      <div class="sh">Name shown when paid</div>
+      <div class="group">${rowList(screen, d.names, "payee", "Add Name", "e.g. A KUMAR")}</div>
+      <div class="sf">The name another bank's SMS gives when you pay this account, such as SBI's "trf to …". The whole name must match; capital letters don't matter.</div>
+      ${screen.isNew ? "" : `<div class="group"><button class="li plain" data-act="delete-account"><span class="danger">Delete ${esc(accountLabel("", d).trim())}</span></button></div>
+      <div class="sf" style="margin-top:-12px">Only this account; ${esc(bank)}'s cards stay.</div>`}`;
   }
 
   // screen: { cardIndex (null for a new card), draft: card, billInput }. Saving also saves its bank.
   function cardView(screen) {
     const d = screen.draft;
-    const bank = state.stack[state.stack.length - 2].draft.bank;
-    return `<div class="nav"><button data-act="back">Cancel</button><span class="mid">${esc(screen.cardIndex == null ? "New Card" : accountLabel("", d).trim())}</span><button class="end" data-act="save-card"><b>Save</b></button></div>
-      <div style="height:8px"></div>
+    const bank = parentBank().draft.bank;
+    return `${editNav(screen.cardIndex == null ? "New Card" : accountLabel("", d).trim(), "save-card")}
       <div class="sh">${esc(bank)} card</div>
       <div class="group">
         <div class="li plain"><span>Last 4 digits</span>${last4Input(d.last4)}</div>
@@ -570,19 +586,26 @@
       <div class="sh">Bill payment shows as</div>
       <div class="group">${rowList(screen, d.bills, "bill", "Add Bill Name", "e.g. SBI CARDS")}</div>
       <div class="sf">The name your bank's SMS gives when you pay this card's bill. Paying a name that contains it counts as a self transfer, so the card's purchases aren't counted twice. Capital letters don't matter. Add another only if a different bank shows the bill differently.</div>
-      ${screen.cardIndex != null ? `<div class="group"><button class="li plain" data-act="delete-card"><span class="danger">Delete Card</span></button></div>` : ""}`;
+      ${screen.cardIndex != null ? `<div class="group"><button class="li plain" data-act="delete-card"><span class="danger">Delete ${esc(accountLabel("", d).trim())}</span></button></div>` : ""}`;
   }
 
-  // The bank as it would be saved: trimmed, with a UPI ID typed but not yet added included.
-  function bankFromScreen(screen) {
-    const d = copyOf(screen.draft);
-    if (d.account) {
-      d.account.last4 = d.account.last4.trim();
-      d.account.name = d.account.name.trim();
-      d.account.upi = withTyped(d.account.upi, screen.upiInput || "");
-      d.account.names = withTyped(d.account.names || [], screen.payeeInput || "");
-    }
-    return d;
+  // Saves the bank page's bank changed by `change(bank)`, then returns to the bank page showing it.
+  function saveBank(change, title, detail) {
+    const parent = parentBank();
+    const bank = copyOf(parent.draft);
+    change(bank);
+    const after = () => {
+      parent.draft = bank;
+      if (parent.index == null) parent.index = state.accounts.length - 1;
+    };
+    saveAccounts(parent.index, bank, title, detail, { pop: true, after });
+  }
+
+  function saveAccount(screen, remove = false) {
+    const d = screen.draft;
+    const account = { last4: d.last4.trim(), name: d.name.trim(), upi: withTyped(d.upi, screen.upiInput || ""), names: withTyped(d.names, screen.payeeInput || "") };
+    saveBank((bank) => { bank.account = remove ? null : account; }, remove ? "Account deleted" : "Account saved",
+      `${accountLabel(parentBank().draft.bank, remove ? d : account)} is ${remove ? "gone" : "saved"}.`);
   }
 
   // Saves the whole list with `bank` at `index` (appended when null), or without it when bank is null.
@@ -600,20 +623,12 @@
   }
 
   function saveCard(screen, remove = false) {
-    const parent = state.stack[state.stack.length - 2];
-    const bank = bankFromScreen(parent);
     const card = { last4: screen.draft.last4.trim(), name: screen.draft.name.trim(), bills: withTyped(screen.draft.bills, screen.billInput) };
-    if (remove) bank.cards.splice(screen.cardIndex, 1);
-    else if (screen.cardIndex == null) bank.cards.push(card);
-    else bank.cards[screen.cardIndex] = card;
-    const index = parent.index;
-    const after = () => {
-      parent.draft = bank;
-      parent.upiInput = "";
-      parent.payeeInput = "";
-      if (parent.index == null) parent.index = state.accounts.length - 1;
-    };
-    saveAccounts(index, bank, remove ? "Card deleted" : "Card saved", `${accountLabel(bank.bank, remove ? screen.draft : card)} is ${remove ? "gone" : "saved"}.`, { pop: true, after });
+    saveBank((bank) => {
+      if (remove) bank.cards.splice(screen.cardIndex, 1);
+      else if (screen.cardIndex == null) bank.cards.push(card);
+      else bank.cards[screen.cardIndex] = card;
+    }, remove ? "Card deleted" : "Card saved", `${accountLabel(parentBank().draft.bank, remove ? screen.draft : card)} is ${remove ? "gone" : "saved"}.`);
   }
 
   // ---- Trends tab: Trends | Recurring | Recipients ----
@@ -1117,7 +1132,7 @@
     const screen = top();
     state.previewLook = (screen && screen.newLook) || null;
     const views = { tx: txView, list: listView, rule: ruleView, unparsed: unparsedView, categories: categoriesView, category: categoryView, merge: mergeView,
-      accounts: accountsView, "add-bank": addBankView, bank: bankView, card: cardView };
+      accounts: accountsView, "add-bank": addBankView, bank: bankView, account: accountView, card: cardView };
     let body = screen ? views[screen.type](screen) : { spending: spendingView, trends: trendsView, rules: rulesView, more: moreView }[state.tab]();
     if (!screen && state.tab !== "rules" && state.tabHistory.length) body = `<div class="nav">${tabBack()}<span class="mid"></span><span class="end"></span></div>${body}`;
     const tabs = screen ? "" : `<nav class="tabbar">${["spending", "trends", "rules", "more"]
@@ -1135,7 +1150,7 @@
     if (box) box.focus();
   }
 
-  const ITEM_LISTS = { upi: (s) => s.draft.account.upi, payee: (s) => s.draft.account.names, bill: (s) => s.draft.bills };
+  const ITEM_LISTS = { upi: (s) => s.draft.upi, payee: (s) => s.draft.names, bill: (s) => s.draft.bills };
 
   // Adds what is typed in `<kind>Input` to the screen's list, once whatever the capitals.
   function addItem(kind) {
@@ -1293,7 +1308,7 @@
     "add-bank": () => push({ type: "add-bank", otherInput: "" }),
     "pick-bank": (el) => {
       state.stack.pop();
-      push({ type: "bank", index: null, draft: { bank: el.dataset.value, account: null, cards: [] }, upiInput: "" });
+      push({ type: "bank", index: null, draft: { bank: el.dataset.value, account: null, cards: [] } });
     },
     "add-other-bank": () => {
       const name = top().otherInput.trim();
@@ -1303,11 +1318,18 @@
     },
     "open-bank": (el) => {
       const bank = copyOf(state.accounts[Number(el.dataset.i)]);
-      if (bank.account) bank.account.names = bank.account.names || [];
-      push({ type: "bank", index: Number(el.dataset.i), draft: { ...bank, cards: bank.cards || [] }, upiInput: "" });
+      push({ type: "bank", index: Number(el.dataset.i), draft: { ...bank, cards: bank.cards || [] } });
     },
-    "add-account": () => { top().draft.account = { last4: "", name: "", upi: [], names: [] }; render(); },
-    "remove-account": () => { top().draft.account = null; top().upiInput = ""; top().payeeInput = ""; render(); },
+    "open-account": () => {
+      const account = copyOf(top().draft.account);
+      push({ type: "account", isNew: false, draft: { ...account, names: account.names || [] }, upiInput: "", payeeInput: "" });
+    },
+    "add-account": () => push({ type: "account", isNew: true, draft: { last4: "", name: "", upi: [], names: [] }, upiInput: "", payeeInput: "" }),
+    "save-account": () => saveAccount(top()),
+    "delete-account": () => showDialog(`Delete ${accountLabel("", top().draft).trim()}?`,
+      `Its UPI IDs and names go too; ${parentBank().draft.bank}'s cards stay. Payments to and from it count as spending again.`,
+      [["Cancel", "close"], ["Delete", "delete-account-confirm", true]]),
+    "delete-account-confirm": () => { state.dialog = null; saveAccount(top(), true); },
     "add-upi": () => addItem("upi"),
     "remove-upi": (el) => removeItem("upi", el),
     "start-upi": () => startAdding("upi"),
@@ -1315,11 +1337,6 @@
     "remove-payee": (el) => removeItem("payee", el),
     "start-payee": () => startAdding("payee"),
     "start-bill": () => startAdding("bill"),
-    "save-bank": () => {
-      const s = top();
-      const bank = bankFromScreen(s);
-      saveAccounts(s.index, bank, "Saved", `${bank.bank} is saved.`, { pop: true });
-    },
     "delete-bank": () => {
       const name = top().draft.bank;
       showDialog(`Delete ${name}?`, "Its account, UPI IDs and cards are removed from My Accounts. Payments to and from them count as spending again.",
@@ -1352,9 +1369,9 @@
     const screen = top();
     if (!name || !screen) return;
     if (screen.type === "category" || screen.type === "add-bank") screen[name] = e.target.value;
-    if (screen.type === "bank") {
+    if (screen.type === "account") {
       if (name === "upiInput" || name === "payeeInput") screen[name] = e.target.value;
-      else screen.draft.account[name === "accountName" ? "name" : name] = e.target.value;
+      else screen.draft[name] = e.target.value;
     }
     if (screen.type === "card") {
       if (name === "billInput") screen.billInput = e.target.value;
