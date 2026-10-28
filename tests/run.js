@@ -97,6 +97,16 @@ const cases = [
     expect: { template: "sbi-cc-spend", bank: "SBI", accountType: "credit_card", account: "5678", merchant: "UBER INDIA SYSTEMS", currency: "INR", amountPaise: -8900, date: "2026-10-22" },
   },
   {
+    name: "HSBC account payment to a person",
+    sms: "INR 1.00 is paid from HSBC account 041-123456-001 to RAHUL KUMAR on 28-Oct-26 with ref 529912345678. If this is not done by you, call 18002673456 to report.",
+    expect: { template: "hsbc-account-paid", bank: "HSBC", accountType: "bank", account: "6001", merchant: "RAHUL KUMAR", currency: "INR", amountPaise: -100, date: "2026-10-28" },
+  },
+  {
+    name: "HSBC account payment to a UPI ID",
+    sms: "INR 1,250.50 is paid from HSBC account XXXXXX6001 to swiggy@icici on 3-Nov-26 with ref 529912345679. If this is not done by you, call 18002673456 to report.",
+    expect: { template: "hsbc-account-paid", bank: "HSBC", accountType: "bank", account: "6001", merchant: "swiggy@icici", currency: "INR", amountPaise: -125050, date: "2026-11-03" },
+  },
+  {
     name: "SBI Card monthly cashback",
     sms: "It's Cashback Time! Happy to share that Rs 599 has been credited to your CASHBACK SBI Card account for the month of Oct'26 - SBI Card",
     expect: { template: "sbi-cc-cashback", bank: "SBI", accountType: "credit_card", account: null, merchant: "SBI Card Cashback", currency: "INR", amountPaise: 59900, date: "2026-10-27" },
