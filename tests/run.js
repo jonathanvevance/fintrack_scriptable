@@ -235,8 +235,8 @@ eq("unknown condition is rejected", compileError([{ when: { merchnat: "x" } }]),
 eq("bad direction is rejected", compileError([{}, { when: { direction: "both" } }]), 'rules.json rule 2: direction must be "in" or "out", got both');
 
 const rupees = (n) => money(n * 100);
-eq("describe merchant pattern", describeRule({ when: { direction: "out", merchant: "swiggy|zomato" }, set: { category: "Food" } }, rupees), 'Money out, merchant contains "swiggy" or "zomato" → Food');
-eq("describe exact merchant from Always tag", describeRule({ when: { merchant: "^AMAZON\\.IN$" }, set: { category: "Shopping" } }, rupees), 'Merchant is "AMAZON.IN" → Shopping');
+eq("describe merchant pattern", describeRule({ when: { direction: "out", merchant: "swiggy|zomato" }, set: { category: "Food" } }, rupees), 'Money out, recipient contains "swiggy" or "zomato" → Food');
+eq("describe exact merchant from Always tag", describeRule({ when: { merchant: "^AMAZON\\.IN$" }, set: { category: "Shopping" } }, rupees), 'Recipient is "AMAZON.IN" → Shopping');
 eq("describe text, account, owner and tags", describeRule({ when: { text: "cashback", account: "1234" }, set: { owner: "Wife", tags: ["perk"] } }, rupees), 'SMS mentions "cashback", account ··1234 → owner Wife, #perk');
 eq("describe amount range", describeRule({ when: { minAmount: 100, maxAmount: 10000 }, set: { tags: ["mid"] } }, rupees), "₹100 to ₹10,000 → #mid");
 eq("describe minimum only", describeRule({ when: { direction: "out", minAmount: 10000 }, set: { tags: ["large"] } }, rupees), "Money out, ₹10,000 or more → #large");

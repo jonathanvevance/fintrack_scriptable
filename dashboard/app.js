@@ -18,6 +18,9 @@
   const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const plural = (n, word) => `${n} ${n === 1 ? word : /[^aeiou]y$/.test(word) ? word.slice(0, -1) + "ies" : word + "s"}`;
   const monthName = (ym) => monthLabel(ym).split(" ")[0];
+  const recipient = (tx) => tx.merchant || tx.bank || "Unknown";
+  // Lists, titles and bubbles show at most 12 characters; the transaction detail shows the full name.
+  const shortName = (name) => (name.length > 12 ? name.slice(0, 11).trimEnd() + "…" : name);
   const FORM_CONDITIONS = ["merchant", "text", "direction", "minAmount", "maxAmount", "account"];
 
   // ---- Category look: known names get an iOS system colour and an emoji, others a stable colour ----
@@ -61,7 +64,7 @@
     trends: "trends", // which view the Trends tab shows: trends | recurring | merchants
     trendCategory: null,
     trendMonths: 12,
-    bubble: null, // merchant picked in the Merchants bubbles
+    bubble: null, // recipient picked in the Recipients bubbles
     stack: [], // pushed screens: { type: "tx" | "list" | "rule" | "unparsed", ... }
     dialog: null,
     pending: null, // a save waiting for Scriptable's reply
@@ -97,7 +100,7 @@
     const where = [tx.bank, tx.account ? "··" + tx.account : null].filter(Boolean).join(" ");
     const day = Number(tx.date.slice(8));
     return `<button class="li" data-act="open-tx" data-ym="${esc(tx.date.slice(0, 7))}" data-id="${esc(tx.id)}">${icon(tx.category)}
-      <div class="main"><div class="t1">${esc(tx.merchant || tx.bank || "Unknown")}</div><div class="t2">${sub}${where ? " · " + esc(where) : ""}${tx.owner ? " · " + esc(tx.owner) : ""}</div></div>
+      <div class="main"><div class="t1">${esc(shortName(recipient(tx)))}</div><div class="t2">${sub}${where ? " · " + esc(where) : ""}${tx.owner ? " · " + esc(tx.owner) : ""}</div></div>
       <div class="amt ${tx.amountPaise > 0 ? "in" : ""}">${tx.amountPaise > 0 ? "+" : ""}${esc(money(Math.abs(tx.amountPaise), tx.currency))}<small>${day} ${esc(monthName(tx.date.slice(0, 7)))}</small></div></button>`;
   }
 
@@ -185,8 +188,8 @@
   function listView(screen) {
     if (screen.merchant) {
       const all = screen.allTime ? tagAll(state.compiled, allTx()).sort((a, b) => (a.date < b.date ? 1 : -1)) : periodTx();
-      const shown = all.filter((t) => (t.merchant || t.bank || "Unknown") === screen.merchant);
-      return `${backNav(screen.merchant)}<div style="height:8px"></div>
+      const shown = all.filter((t) => recipient(t) === screen.merchant);
+      return `${backNav(shortName(screen.merchant))}<div style="height:8px"></div>
       <div class="group">${shown.map(txRow).join("") || `<div class="empty">Nothing here</div>`}</div>`;
     }
     const list = periodTx();
@@ -209,14 +212,14 @@
     const when = `${Number(tx.date.slice(8))} ${monthLabel(tx.date.slice(0, 7))}`;
     return `${backNav("", `<button data-act="save-tx"><b>Save</b></button>`)}
       <div style="text-align:center;padding:6px 16px 18px">${icon(screen.draft, "xl")}
-        <div style="font-size:22px;font-weight:700">${esc(tx.merchant || tx.bank || "Unknown")}</div>
+        <div style="font-size:22px;font-weight:700">${esc(recipient(tx))}</div>
         <div class="big ${tx.amountPaise > 0 ? "in" : ""}" style="font-size:40px">${esc(money(Math.abs(tx.amountPaise), tx.currency))}</div>
         <div class="muted">${esc([when, tx.bank, tx.account ? "··" + tx.account : null].filter(Boolean).join(" · "))}</div></div>
       <div class="sh">Category</div>
       <div class="group">${rows}
         <div class="li plain"><input class="left" data-field="newCat" value="${esc(screen.newCat || "")}" placeholder="New category" autocapitalize="words">
           <button class="link" data-act="add-cat">Add</button></div></div>
-      ${tx.merchant ? `<div class="group"><button class="li plain" data-act="toggle-always"><div class="main"><div class="t1" style="white-space:normal">Always tag ${esc(tx.merchant)} as ${esc(screen.draft || "…")}</div>
+      ${tx.merchant ? `<div class="group"><button class="li plain" data-act="toggle-always"><div class="main"><div class="t1" style="white-space:normal">Always tag ${esc(shortName(tx.merchant))} as ${esc(screen.draft || "…")}</div>
           <div class="t2">Applies to ${plural(sameMerchant, "transaction")} now and every future one</div></div><span class="toggle ${screen.always ? "on" : ""}"></span></button></div>` : ""}
       <div class="sh">Message</div>
       <div class="group pad muted small" style="line-height:1.4;user-select:text;-webkit-user-select:text">${esc(tx.raw)}</div>
@@ -242,7 +245,7 @@
     }
     if (JSON.stringify(manual) !== JSON.stringify(tx.manual || {})) payload.manual = { ym: screen.ym, id: tx.id, manual };
     if (!payload.rules && !payload.manual) return back();
-    const detail = payload.rules ? `Every ${tx.merchant} transaction is now ${category}.` : `This transaction is now ${category}.`;
+    const detail = payload.rules ? `Every ${shortName(tx.merchant)} transaction is now ${category}.` : `This transaction is now ${category}.`;
     commit(payload, payload.rules ? "Rule saved" : "Category saved", detail, { pop: true });
   }
 
@@ -288,7 +291,7 @@
       ${rows ? `<div class="sf" style="margin-top:-12px">Tap a message to copy it.</div>` : ""}`;
   }
 
-  // ---- Trends tab: Trends | Recurring | Merchants ----
+  // ---- Trends tab: Trends | Recurring | Recipients ----
 
   const shortMoney = (paise) => {
     const r = paise / 100;
@@ -318,7 +321,7 @@
   }
 
   function trendsView() {
-    const views = [["trends", "Trends"], ["recurring", "Recurring"], ["merchants", "Merchants"]];
+    const views = [["trends", "Trends"], ["recurring", "Recurring"], ["merchants", "Recipients"]];
     const seg = `<div class="seg wide">${views.map(([v, label]) => `<button data-act="trends-view" data-value="${v}" class="${state.trends === v ? "on" : ""}">${label}</button>`).join("")}</div>`;
     const body = { trends: categoryTrend, recurring: recurringList, merchants: merchantBubbles }[state.trends]();
     return `<div class="large first">${views.find(([v]) => v === state.trends)[1]}</div>${seg}${body}`;
@@ -369,7 +372,7 @@
     const row = (r) => {
       const when = r.paidThisMonth ? `paid ${Number(r.lastDate.slice(8))} ${mon}` : r.day > day ? `in ${plural(r.day - day, "day")}` : r.day === day ? "today" : `due ${r.day} ${mon}`;
       return `<button class="li" data-act="open-merchant" data-value="${esc(r.merchant)}" data-all="1">${icon(r.category)}
-        <div class="main"><div class="t1">${esc(r.merchant)}</div><div class="t2">Monthly · ${plural(r.months, "month")}${r.varies ? " · varies" : ""}</div></div>
+        <div class="main"><div class="t1">${esc(shortName(r.merchant))}</div><div class="t2">Monthly · ${plural(r.months, "month")}${r.varies ? " · varies" : ""}</div></div>
         <div class="amt">${esc(money(r.paise))}<small>${esc(when)}</small></div></button>`;
     };
     const coming = items.filter((r) => !r.paidThisMonth);
@@ -378,7 +381,7 @@
         <div class="muted small">${plural(items.length, "recurring payment")} · ${esc(money(monthly * 12))} a year</div></div>
       ${coming.length ? `<div class="sh">Coming up</div><div class="group">${coming.map(row).join("")}</div>` : ""}
       ${paid.length ? `<div class="sh">Paid this month</div><div class="group">${paid.map(row).join("")}</div>` : ""}
-      <div class="sf">Spotted automatically: the same merchant, a similar amount and around the same day each month.</div>`;
+      <div class="sf">Spotted automatically: the same recipient, a similar amount and around the same day each month.</div>`;
   }
 
   // Circles sized by spend, packed outward from the biggest; the viewBox is fitted afterwards.
@@ -407,18 +410,19 @@
     const y0 = Math.min(...circles.map((c) => c.y - c.r)) - 4, y1 = Math.max(...circles.map((c) => c.y + c.r)) + 4;
     const svg = circles.map(({ m, r, x, y }) => {
       const chars = Math.floor((r * 2) / 7.5);
-      const name = m.merchant.length > chars ? m.merchant.slice(0, Math.max(chars - 1, 1)) + "…" : m.merchant;
+      const short = shortName(m.merchant);
+      const name = short.length > chars ? short.slice(0, Math.max(chars - 1, 1)) + "…" : short;
       return `<g data-act="bubble" data-value="${esc(m.merchant)}"><circle cx="${x}" cy="${y}" r="${r}" fill="${colour(m.category)}" opacity="${m === picked ? 1 : 0.8}" ${m === picked ? 'stroke="var(--text)" stroke-width="3"' : ""}/>
         ${r >= 24 ? `<text x="${x}" y="${y + (r >= 34 ? -2 : 4)}" text-anchor="middle" font-size="${r >= 44 ? 13 : 11}" font-weight="700" fill="#fff">${esc(name)}</text>` : ""}
         ${r >= 34 ? `<text x="${x}" y="${y + 14}" text-anchor="middle" font-size="11" fill="#fff" opacity=".85">${esc(shortMoney(m.paise))}</text>` : ""}</g>`;
     }).join("");
     const row = (m) => `<button class="li" data-act="open-merchant" data-value="${esc(m.merchant)}">${icon(m.category)}
-      <div class="main"><div class="t1">${esc(m.merchant)}</div><div class="t2">${plural(m.count, "payment")} · ${esc(money(Math.round(m.paise / m.count / 100) * 100))} each</div></div>
+      <div class="main"><div class="t1">${esc(shortName(m.merchant))}</div><div class="t2">${plural(m.count, "payment")} · ${esc(money(Math.round(m.paise / m.count / 100) * 100))} each</div></div>
       <div class="amt">${esc(money(m.paise))}</div><span class="chev"></span></button>`;
     return `${monthStrip()}
       <div class="group" style="padding:6px"><svg class="bubbles" viewBox="${x0} ${y0} ${x1 - x0} ${y1 - y0}">${svg}</svg></div>
       <div class="group">${row(picked)}</div>
-      <div class="sh">All merchants · ${esc(periodLabel())}</div><div class="group">${list.map(row).join("")}</div>`;
+      <div class="sh">All recipients · ${esc(periodLabel())}</div><div class="group">${list.map(row).join("")}</div>`;
   }
 
   // ---- Rules (Shortcuts-style sentences) ----
@@ -433,7 +437,7 @@
     const accent = colour(set.category);
     const parts = [];
     if (when.direction) parts.push(`money goes ${token(when.direction, when.direction === "in" ? "var(--green)" : "var(--red)")}`);
-    for (const [key, label] of [["merchant", "merchant"], ["text", "SMS"], ["bank", "bank"], ["template", "template"]]) {
+    for (const [key, label] of [["merchant", "recipient"], ["text", "SMS"], ["bank", "bank"], ["template", "template"]]) {
       if (when[key] == null) continue;
       const { exact, words } = patternWords(when[key]);
       const verb = exact ? "is" : key === "text" ? "mentions" : "contains";
@@ -535,14 +539,14 @@
       <div style="height:8px"></div>
       <div class="sh">If</div>
       <div class="group">
-        ${field(screen, "merchant", "Merchant", "swiggy|zomato")}
+        ${field(screen, "merchant", "Recipient", "swiggy|zomato")}
         ${field(screen, "text", "SMS mentions", "cashback")}
         <div class="li plain"><span style="flex:1">Money</span><div class="seg">${seg}</div></div>
         ${field(screen, "minAmount", "At least ₹", "any")}
         ${field(screen, "maxAmount", "At most ₹", "any")}
         ${field(screen, "account", "Account", "last digits")}
       </div>
-      <div class="sf">Separate several merchants or words with |.</div>${extra}
+      <div class="sf">Separate several recipients or words with |.</div>${extra}
       <div class="sh">Then</div>
       <div class="group">
         ${field(screen, "category", "Category", "Food")}
@@ -736,7 +740,7 @@
     "copy-sms": () => request("copy", { text: findTx(top().ym, top().id).raw }),
     "delete-tx": () => {
       const tx = findTx(top().ym, top().id);
-      showDialog("Delete Transaction?", `${tx.merchant || tx.bank || "This transaction"}, ${money(Math.abs(tx.amountPaise), tx.currency)}. This cannot be undone.`,
+      showDialog("Delete Transaction?", `${shortName(recipient(tx))}, ${money(Math.abs(tx.amountPaise), tx.currency)}. This cannot be undone.`,
         [["Cancel", "close"], ["Delete", "delete-tx-confirm", true]]);
     },
     "delete-tx-confirm": () => { state.dialog = null; render(); request("deleteTx", { ym: top().ym, id: top().id }, { pop: true }); },
