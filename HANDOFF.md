@@ -156,3 +156,36 @@ This is the core of the "start manual, become automatic" requirement.
 2. Import the remaining statements.
 3. Clear the review queue.
 4. Freeze `snapshots/YYYY-MM.json`.
+
+## 8. SMS coverage for next month (open work)
+
+Accounts in use: SBI and HSBC bank accounts (UPI from both, mainly HSBC), the SBI Cashback card and the
+HSBC Premier card. ICICI templates stay for older transactions.
+
+Decisions:
+
+- Self transfers are not counted as spend; everything else that goes out is (bill payments such as phone
+  recharge, and Zerodha investments, counted once).
+- Paying a credit card bill is a self transfer: the card purchases are already counted. This covers the
+  SBI card bill paid through PhonePe from SBI or HSBC UPI.
+- Self transfers are recognised from exact SMS templates, not guessed.
+- Foreign-currency card spends stay separate from the INR total.
+
+Already covered: HSBC UPI payment (`hsbc-account-paid`), SBI UPI payment (`sbi-upi-debit`), SBI card
+spend in INR (`sbi-cc-spend`), SBI card cashback (`sbi-cc-cashback`), HSBC card spend in any currency
+(`hsbc-cc-spend`), HSBC NEFT out (`hsbc-neft-out`), AutoPay reminders ignored.
+
+To do (each needs a real SMS with numbers and names replaced):
+
+- [ ] Self transfers SBI → HSBC and HSBC → SBI, both the money-out and money-in SMS.
+- [ ] SBI card bill paid through PhonePe: the SBI / HSBC UPI debit and SBI Card's payment-received SMS.
+- [ ] HSBC Premier card bill payment and any SMS it sends.
+- [ ] Money received by UPI into HSBC and into SBI.
+- [ ] Zerodha from SBI (UPI AutoPay, UPI or NEFT/IMPS).
+- [ ] Find out from the phone's messages whether Zerodha's own SMS reach FinTrack (the SMS automation's
+      sender filter). If they do, the investment would be counted twice.
+- [ ] Refunds or reversals on either card.
+- [ ] SBI card spend in a foreign currency, if it happens.
+- [ ] Salary or other incoming NEFT/IMPS into HSBC or SBI.
+- [ ] Then: mark self transfers in the templates and leave them out of Spending totals (still listed).
+
