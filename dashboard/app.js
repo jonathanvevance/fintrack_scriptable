@@ -330,10 +330,7 @@
         <div class="muted">${esc([when, tx.bank, tx.account ? "··" + tx.account : null].filter(Boolean).join(" · "))}</div></div>
       <div class="sh">Category</div>
       <div class="group">${rows}
-        <div class="li plain"><input class="left" data-field="newCat" value="${esc(screen.newCat || "")}" placeholder="New category" autocapitalize="words">
-          <button class="link" data-act="add-cat">Add</button></div>
-        ${screen.draft && !screen.newLook ? `<button class="li plain" data-act="edit-look"><span class="link">Change Icon for ${esc(screen.draft)}</span></button>` : ""}</div>
-      ${screen.newLook && screen.newLook.name === screen.draft ? lookPicker(screen.newLook) : ""}
+        <button class="li plain" data-act="new-category"><span class="link">New Category…</span></button></div>
       ${tx.merchant ? `<div class="group"><button class="li plain" data-act="toggle-always"><div class="main"><div class="t1" style="white-space:normal">Always put ${esc(shortName(tx.merchant))} in ${esc(screen.draft || "…")}</div>
           <div class="t2">Applies to ${plural(sameMerchant, "transaction")} now and every future one</div></div><span class="toggle ${screen.always ? "on" : ""}"></span></button></div>` : ""}
       <div class="sh">Message</div>
@@ -359,12 +356,9 @@
       manual.category = category;
     }
     if (JSON.stringify(manual) !== JSON.stringify(tx.manual || {})) payload.manual = { ym: screen.ym, id: tx.id, manual };
-    const lookChange = lookPayload(screen.newLook, category);
-    if (lookChange) payload.categories = lookChange;
-    if (!payload.rules && !payload.manual && !payload.categories) return back();
-    const detail = payload.rules ? `Every ${shortName(tx.merchant)} transaction is now ${category}.`
-      : payload.manual ? `This transaction is now ${category}.` : `${category} has a new icon.`;
-    commit(payload, payload.rules ? "Rule saved" : payload.manual ? "Category saved" : "Icon saved", detail, { pop: true });
+    if (!payload.rules && !payload.manual) return back();
+    const detail = payload.rules ? `Every ${shortName(tx.merchant)} transaction is now ${category}.` : `This transaction is now ${category}.`;
+    commit(payload, payload.rules ? "Rule saved" : "Category saved", detail, { pop: true });
   }
 
   // The whole categories map with `newLook` saved for `category`, or null when nothing changes.
@@ -654,7 +648,10 @@
     if (taken) return showDialog("Already exists", `There is already a category called ${name}.${screen.name == null ? "" : " Use Merge to combine them."}`);
     if (screen.name == null) {
       const [c, emoji] = screen.lookTouched ? [screen.newLook.colour, screen.newLook.emoji] : suggestLook(name);
-      return commit({ categories: { ...state.categories, [name]: { emoji, colour: c } } }, "Category added", `${name} is ready to pick.`, { pop: true });
+      const from = state.stack[state.stack.length - 2];
+      const usedFrom = from && (from.type === "tx" || from.type === "rule");
+      return commit({ categories: { ...state.categories, [name]: { emoji, colour: c } } }, "Category added", `${name} is ready to pick.`,
+        { pop: true, quiet: usedFrom, after: usedFrom ? () => useNewCategory(name) : null });
     }
     if (name === screen.name) {
       const change = lookPayload(screen.newLook, name);
@@ -665,6 +662,24 @@
     const lk = screen.newLook || startLook(screen.name);
     payload.categories[name] = { emoji: lk.emoji, colour: lk.colour };
     commit(payload, "Category renamed", `${screen.name} is now ${name}.`, { pop: true });
+  }
+
+  // Back on the transaction or rule that opened New Category: select it, and for a transaction ask
+  // whether it is for this one only or a rule for every transaction to that recipient.
+  function useNewCategory(name) {
+    const s = top();
+    if (s.type === "rule") {
+      s.fields.category = name;
+      return;
+    }
+    s.draft = name;
+    const tx = findTx(s.ym, s.id);
+    if (!tx.merchant) return;
+    state.dialog = {
+      title: `Put ${shortName(tx.merchant)} in ${name}?`,
+      text: `Just this transaction, or every ${shortName(tx.merchant)} transaction from now on (a rule)?`,
+      actions: [["Just This One", "tx-once"], ["Always", "tx-always"]],
+    };
   }
 
   function mergeView(screen) {
@@ -696,11 +711,10 @@
     return {
       extra,
       more: words.length > 0 || when.account != null,
-      newLook: null,
       fields: {
         recipients, exact, recipientInput: "", words, wordInput: "", direction: when.direction || "",
         minAmount: when.minAmount != null ? String(when.minAmount) : "", maxAmount: when.maxAmount != null ? String(when.maxAmount) : "",
-        account: when.account || "", category: (rule.set || {}).category || "", catInput: "",
+        account: when.account || "", category: (rule.set || {}).category || "",
       },
     };
   }
@@ -780,11 +794,8 @@
       <div class="sh">Then set category</div>
       <div class="group">
         <div class="chips" style="padding-top:12px">${cats}</div>
-        <div class="li plain"><input class="left" data-field="catInput" value="${esc(f.catInput)}" placeholder="New category" autocapitalize="words">
-          <button class="link" data-act="rule-new-cat">Add</button></div>
-        ${f.category && !screen.newLook ? `<button class="li plain" data-act="edit-look"><span class="link">Change Icon for ${esc(f.category)}</span></button>` : ""}
+        <button class="li plain" data-act="new-category"><span class="link">New Category…</span></button>
       </div>
-      ${screen.newLook && screen.newLook.name === f.category ? lookPicker(screen.newLook) : ""}
       <div id="preview">${previewHtml(screen)}</div>
       ${editing ? `<div class="group">
         ${screen.index > 0 ? `<button class="li plain" data-act="move-rule" data-value="-1"><span class="link">Move Up</span></button>` : ""}
@@ -804,10 +815,7 @@
     const next = state.rules.slice();
     if (screen.index == null) next.unshift(rule);
     else next[screen.index] = rule;
-    const payload = { rules: next };
-    const lookChange = lookPayload(screen.newLook, rule.set.category);
-    if (lookChange) payload.categories = lookChange;
-    commit(payload, "Rule saved", describeRule(rule, rupees), { pop: true });
+    commit({ rules: next }, "Rule saved", describeRule(rule, rupees), { pop: true });
   }
 
   // ---- Saving through Scriptable ----
@@ -866,6 +874,7 @@
     }
     const changed = txs.filter((tx, i) => JSON.stringify(tagsFor(state.compiled, tx)) !== before[i]).length;
     state.stack.length = Math.max(0, state.stack.length - (p.pop === true ? 1 : p.pop || 0));
+    if (p.after) p.after();
     if (!p.quiet) {
       state.dialog = {
         title: p.title,
@@ -946,17 +955,7 @@
       const tx = tagAll(state.compiled, [findTx(el.dataset.ym, el.dataset.id)])[0];
       push({ type: "tx", ym: el.dataset.ym, id: tx.id, draft: tx.category, always: false });
     },
-    "pick-cat": (el) => { const s = top(); s.draft = el.dataset.value; if (s.newLook && s.newLook.name !== s.draft) s.newLook = null; render(); },
-    "add-cat": () => {
-      const s = top();
-      const name = (s.newCat || "").trim();
-      if (!name) return;
-      s.draft = name;
-      s.newCat = "";
-      s.newLook = state.categories[name] ? null : startLook(name);
-      render();
-    },
-    "edit-look": () => { const s = top(); s.newLook = startLook(s.type === "tx" ? s.draft : s.fields.category); render(); },
+    "pick-cat": (el) => { top().draft = el.dataset.value; render(); },
     "pick-emoji": (el) => { top().newLook.emoji = el.dataset.value; top().lookTouched = true; render(); },
     "pick-colour": (el) => { top().newLook.colour = el.dataset.value; top().lookTouched = true; render(); },
     "open-categories": () => push({ type: "categories" }),
@@ -1001,20 +1000,13 @@
       window.scrollTo(0, 0);
     },
     "toggle-always": () => { top().always = !top().always; render(); },
+    "tx-once": () => { state.dialog = null; top().always = false; saveTx(top()); },
+    "tx-always": () => { state.dialog = null; top().always = true; saveTx(top()); },
     "save-tx": () => saveTx(top()),
     "new-rule": (el) => push({ type: "rule", index: null, ...fieldsFromRule(el.dataset.category ? { set: { category: el.dataset.category } } : {}) }),
     "edit-rule": (el) => { const i = Number(el.dataset.i); push({ type: "rule", index: i, ...fieldsFromRule(state.rules[i]) }); },
     dir: (el) => { top().fields.direction = el.dataset.value; render(); },
-    "rule-cat": (el) => { const s = top(); s.fields.category = el.dataset.value; if (s.newLook && s.newLook.name !== s.fields.category) s.newLook = null; render(); },
-    "rule-new-cat": () => {
-      const s = top();
-      const name = s.fields.catInput.trim();
-      if (!name) return;
-      s.fields.category = name;
-      s.fields.catInput = "";
-      s.newLook = state.categories[name] ? null : startLook(name);
-      render();
-    },
+    "rule-cat": (el) => { top().fields.category = el.dataset.value; render(); },
     "match-mode": (el) => { top().fields.exact = el.dataset.value === "is"; render(); },
     "toggle-more": () => { top().more = !top().more; render(); },
     "add-word": (el) => {
@@ -1076,7 +1068,6 @@
     const name = e.target.dataset && e.target.dataset.field;
     const screen = top();
     if (!name || !screen) return;
-    if (screen.type === "tx") screen.newCat = e.target.value;
     if (screen.type === "category") screen[name] = e.target.value;
     if (screen.type === "rule") {
       screen.fields[name] = e.target.value;
@@ -1094,7 +1085,7 @@
     render();
   });
 
-  const ENTER_ADDS = { newCat: "add-cat", catInput: "rule-new-cat", recipientInput: "add-word", wordInput: "add-word" };
+  const ENTER_ADDS = { recipientInput: "add-word", wordInput: "add-word" };
   app.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && e.target.dataset && e.target.dataset.field === "nameInput") return e.target.blur();
     const act = e.key === "Enter" && e.target.dataset && ENTER_ADDS[e.target.dataset.field];
