@@ -20,7 +20,7 @@
   const monthName = (ym) => monthLabel(ym).split(" ")[0];
   const recipient = (tx) => tx.merchant || tx.bank || "Unknown";
   // Lists, titles and bubbles show at most 12 characters; the transaction detail shows the full name.
-  const shortName = (name) => (name.length > 12 ? name.slice(0, 11).trimEnd() + "…" : name);
+  const shortName = (name) => name.slice(0, 12).trimEnd();
   const FORM_CONDITIONS = ["merchant", "text", "direction", "minAmount", "maxAmount", "account"];
 
   // ---- Category look: saved in categories.json, else suggested from the name ----
@@ -537,7 +537,7 @@
     const svg = circles.map(({ m, r, x, y }) => {
       const chars = Math.floor((r * 2) / 7.5);
       const short = shortName(m.merchant);
-      const name = short.length > chars ? short.slice(0, Math.max(chars - 1, 1)) + "…" : short;
+      const name = short.slice(0, Math.max(chars, 1));
       return `<g data-act="bubble" data-value="${esc(m.merchant)}"><circle cx="${x}" cy="${y}" r="${r}" fill="${colour(m.category)}" opacity="${m === picked ? 1 : 0.8}" ${m === picked ? 'stroke="var(--text)" stroke-width="3"' : ""}/>
         ${r >= 24 ? `<text x="${x}" y="${y + (r >= 34 ? -2 : 4)}" text-anchor="middle" font-size="${r >= 44 ? 13 : 11}" font-weight="700" fill="#fff">${esc(name)}</text>` : ""}
         ${r >= 34 ? `<text x="${x}" y="${y + 14}" text-anchor="middle" font-size="11" fill="#fff" opacity=".85">${esc(shortMoney(m.paise))}</text>` : ""}</g>`;
