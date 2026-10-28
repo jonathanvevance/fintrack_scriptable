@@ -508,12 +508,16 @@
       <div class="sf">FinTrack reads SMS from SBI, HSBC and ICICI. Another bank's SMS needs a new template first.</div>`;
   }
 
-  // Removable chips plus an input with Add; `items` is the list, `input` the screen key being typed.
-  function chipList(items, removeAct, input, value, addAct, placeholder) {
-    const chips = items.map((w, i) => `<span class="namechip">${esc(w)}<button data-act="${removeAct}" data-i="${i}">×</button></span>`).join("");
-    return `${chips ? `<div class="namechips">${chips}</div>` : ""}
-      <div class="li plain"><input class="left" data-field="${input}" value="${esc(value)}" placeholder="${esc(items.length ? "Add another" : placeholder)}" autocapitalize="off" autocorrect="off">
-        <button class="link" data-act="${addAct}">Add</button></div>`;
+  // One row per item with Remove, then "Add …" which opens an input. `kind` is "upi" or "bill":
+  // the actions are remove-<kind>, start-<kind>, add-<kind> and the typed text is screen[<kind>Input].
+  function rowList(screen, items, kind, addLabel, placeholder) {
+    const rows = items.map((item, i) => `<div class="li plain"><div class="main"><div class="t1">${esc(item)}</div></div>
+      <button class="danger" data-act="remove-${kind}" data-i="${i}">Remove</button></div>`).join("");
+    const adding = screen[`adding_${kind}`]
+      ? `<div class="li plain"><input class="left" data-field="${kind}Input" value="${esc(screen[kind + "Input"])}" placeholder="${esc(placeholder)}" autocapitalize="off" autocorrect="off">
+        <button class="link" data-act="add-${kind}">Add</button></div>`
+      : `<button class="li plain" data-act="start-${kind}"><span class="link">${addLabel}</span></button>`;
+    return rows + adding;
   }
 
   const last4Input = (value) => `<input data-field="last4" value="${esc(value)}" placeholder="1234" inputmode="numeric" maxlength="4">`;
@@ -528,11 +532,7 @@
         <div class="li plain"><span>Last 4 digits</span>${last4Input(d.account.last4)}</div>
         <div class="li plain"><span>Name</span><input data-field="accountName" value="${esc(d.account.name)}" placeholder="e.g. Savings" autocapitalize="words"></div></div>
       <div class="sh">UPI IDs on this account</div>
-      <div class="group">${d.account.upi.map((id, i) => `<div class="li plain"><div class="main"><div class="t1">${esc(id)}</div></div>
-          <button class="danger" data-act="remove-upi" data-i="${i}">Remove</button></div>`).join("")}
-        ${screen.addingUpi ? `<div class="li plain"><input class="left" data-field="upiInput" value="${esc(screen.upiInput)}" placeholder="e.g. name@okhsbc" autocapitalize="off" autocorrect="off">
-          <button class="link" data-act="add-upi">Add</button></div>`
-          : `<button class="li plain" data-act="start-upi"><span class="link">Add UPI ID</span></button>`}</div>
+      <div class="group">${rowList(screen, d.account.upi, "upi", "Add UPI ID", "e.g. name@okhsbc")}</div>
       <div class="sf">Money sent to or received from these counts as a self transfer. Each UPI app can give the account its own ID; add them all.</div>
       <div class="group"><button class="li plain" data-act="remove-account"><span class="danger">Remove Account</span></button></div>`
       : `<div class="group"><button class="li plain" data-act="add-account"><span class="link">Add Account</span></button></div>
@@ -557,8 +557,8 @@
         <div class="li plain"><span>Last 4 digits</span>${last4Input(d.last4)}</div>
         <div class="li plain"><span>Name</span><input data-field="name" value="${esc(d.name)}" placeholder="e.g. Cashback" autocapitalize="words"></div></div>
       <div class="sh">Bill payment shows as</div>
-      <div class="group">${chipList(d.bills, "remove-bill", "billInput", screen.billInput, "add-bill", "e.g. SBI CARDS")}</div>
-      <div class="sf">The name your bank's SMS gives when you pay this card's bill. Paying a name that contains it counts as a self transfer, so the card's purchases aren't counted twice. Capital letters don't matter.</div>
+      <div class="group">${rowList(screen, d.bills, "bill", "Add Bill Name", "e.g. SBI CARDS")}</div>
+      <div class="sf">The name your bank's SMS gives when you pay this card's bill. Paying a name that contains it counts as a self transfer, so the card's purchases aren't counted twice. Capital letters don't matter. Add another only if a different bank shows the bill differently.</div>
       ${screen.cardIndex != null ? `<div class="group"><button class="li plain" data-act="delete-card"><span class="danger">Delete Card</span></button></div>` : ""}`;
   }
 
@@ -1115,6 +1115,13 @@
     if (on) strip.scrollLeft = on.offsetLeft - (strip.clientWidth - on.offsetWidth) / 2;
   }
 
+  function startAdding(kind) {
+    top()[`adding_${kind}`] = true;
+    render();
+    const box = app.querySelector(`[data-field="${kind}Input"]`);
+    if (box) box.focus();
+  }
+
   function push(screen) {
     state.stack.push(screen);
     render();
@@ -1278,12 +1285,8 @@
       if (box) box.focus();
     },
     "remove-upi": (el) => { top().draft.account.upi.splice(Number(el.dataset.i), 1); render(); },
-    "start-upi": () => {
-      top().addingUpi = true;
-      render();
-      const box = app.querySelector('[data-field="upiInput"]');
-      if (box) box.focus();
-    },
+    "start-upi": () => startAdding("upi"),
+    "start-bill": () => startAdding("bill"),
     "save-bank": () => {
       const s = top();
       const bank = bankFromScreen(s);
