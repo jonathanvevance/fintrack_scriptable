@@ -11,8 +11,10 @@
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; background: var(--bg); color: var(--text); font: 17px -apple-system, system-ui, sans-serif; -webkit-text-size-adjust: 100%; }
 body { padding-top: env(safe-area-inset-top); }
-/* Marks where the page starts, under Scriptable's own Close / Share bar. */
-body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; z-index: 5; height: 1px; background: var(--sep); pointer-events: none; }
+/* Scriptable's Close / Share banner floats over the top of the page and the page cannot measure it;
+   100px is where it ends on an iPhone 17. The line marks where the page starts and stays put. */
+:root { --banner: 100px; }
+body::before { content: ""; position: fixed; top: var(--banner); left: 0; right: 0; z-index: 5; height: 1px; background: var(--sep); pointer-events: none; }
 button { font: inherit; color: inherit; background: none; border: none; padding: 0; text-align: inherit; cursor: pointer; }
 input { font: inherit; color: var(--text); background: none; border: none; outline: none; min-width: 0; }
 input::placeholder { color: var(--sec); }
@@ -20,7 +22,7 @@ input::placeholder { color: var(--sec); }
 .screen.no-tabs { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
 
 /* Navigation */
-.nav { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; padding: 0 16px; background: color-mix(in srgb, var(--bg) 85%, transparent); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); }
+.nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; padding: 0 16px; background: color-mix(in srgb, var(--bg) 85%, transparent); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); }
 .nav > * { flex: 1; } .nav .mid { text-align: center; font-weight: 600; white-space: nowrap; } .nav .end { text-align: right; }
 .nav button { color: var(--blue); }
 .large { font-size: 34px; font-weight: 700; letter-spacing: .3px; padding: 2px 16px 10px; }

@@ -643,42 +643,4 @@
     },
   };
   render();
-
-  // TEMPORARY: ruler and viewport numbers, to find where Scriptable's banner ends.
-  (function ruler() {
-    const r = document.createElement("div");
-    r.style.cssText = "position:fixed;top:0;left:0;width:46px;height:200px;z-index:20;pointer-events:none;font:10px -apple-system;color:#ff2d55";
-    let html = "";
-    for (let y = 0; y <= 200; y += 10) {
-      const major = y % 20 === 0;
-      html += `<div style="position:absolute;top:${y}px;left:0;width:${major ? 14 : 8}px;height:1px;background:#ff2d55"></div>`;
-      if (major) html += `<div style="position:absolute;top:${y - 6}px;left:16px;font-weight:700">${y}</div>`;
-    }
-    r.innerHTML = html;
-    document.body.appendChild(r);
-
-    const probe = document.createElement("div");
-    probe.style.cssText = "position:fixed;top:0;left:0;padding-top:env(safe-area-inset-top);visibility:hidden";
-    document.body.appendChild(probe);
-    const box = document.createElement("div");
-    box.style.cssText = "position:fixed;top:220px;right:8px;z-index:20;pointer-events:none;background:rgba(255,45,85,.92);color:#fff;font:12px/1.35 ui-monospace,monospace;padding:6px 8px;border-radius:8px;white-space:pre";
-    document.body.appendChild(box);
-    let minY = window.scrollY;
-    const show = () => {
-      minY = Math.min(minY, window.scrollY);
-      const vv = window.visualViewport || {};
-      box.textContent = [
-        `safeTop  ${parseFloat(getComputedStyle(probe).paddingTop)}`,
-        `inner    ${window.innerWidth}x${window.innerHeight}`,
-        `screen   ${screen.width}x${screen.height}`,
-        `client   ${document.documentElement.clientHeight}`,
-        `vv       ${Math.round(vv.height)} off ${Math.round(vv.offsetTop)}`,
-        `scrollY  ${Math.round(window.scrollY)} min ${Math.round(minY)}`,
-        `dpr      ${window.devicePixelRatio}`,
-      ].join("\n");
-    };
-    show();
-    window.addEventListener("scroll", show, { passive: true });
-    window.addEventListener("resize", show);
-  })();
 })();
