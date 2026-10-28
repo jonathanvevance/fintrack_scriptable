@@ -1,21 +1,21 @@
 // FinTrack dashboard. Scriptable shows this page in a WebView and calls fintrack.load(data) with
-//   { months: { "YYYY-MM": [tx] }, rules: [rule], unparsed: [{ id, text }], version, currentMonth: "YYYY-MM" }.
+//   { months: { "YYYY-MM": [tx] }, rules: [rule], categories: { name: { emoji, colour } },
+//     unparsed: [{ id, text }], version, currentMonth: "YYYY-MM" }.
 // The page never writes files. Requests go out through fintrack.send({ action, ... }):
-//   save { rules?: [rule], manual?: { ym, id, manual } }, pasteSms, copy { text }, deleteTx { ym, id },
+//   save { rules?: [rule], manual?: { ym, id, manual }, categories?: { name: look } }, pasteSms, copy { text }, deleteTx { ym, id },
 //   clearUnparsed, update.
 // Scriptable answers fintrack.reply({ ok, title?, message?, data?, ym? }); `data` replaces what
 // fintrack.load gave. Saves are applied here only once the reply says ok.
 // Needs FT.tags (lib/tags.js) and FT.format (lib/format.js) loaded first.
 
 (function () {
-  const { compileRules, tagsFor, tagAll, describeRule, patternWords } = FT.tags;
+  const { compileRules, tagsFor, tagAll, describeRule, patternWords, isPlainPattern, recipientPattern } = FT.tags;
   const { money, monthLabel, shiftMonth, totals, categoryTotals, merchantTotals, recurringPayments } = FT.format;
   const app = document.getElementById("app");
 
   const rupees = (n) => money(Math.round(n * 100));
   const ESCAPES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ESCAPES[c]);
-  const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const plural = (n, word) => `${n} ${n === 1 ? word : /[^aeiou]y$/.test(word) ? word.slice(0, -1) + "ies" : word + "s"}`;
   const monthName = (ym) => monthLabel(ym).split(" ")[0];
   const recipient = (tx) => tx.merchant || tx.bank || "Unknown";
@@ -23,31 +23,89 @@
   const shortName = (name) => (name.length > 12 ? name.slice(0, 11).trimEnd() + "…" : name);
   const FORM_CONDITIONS = ["merchant", "text", "direction", "minAmount", "maxAmount", "account"];
 
-  // ---- Category look: known names get an iOS system colour and an emoji, others a stable colour ----
+  // ---- Category look: saved in categories.json, else suggested from the name ----
 
-  const KNOWN = {
-    food: ["#ff9500", "🍜"], groceries: ["#34c759", "🥦"], shopping: ["#af52de", "🛍️"], travel: ["#007aff", "🚕"],
-    transport: ["#007aff", "🚕"], coffee: ["#a2845e", "☕️"], subscriptions: ["#5856d6", "📺"], transfers: ["#8e8e93", "↔︎"],
-    cashback: ["#30b0c7", "💸"], bills: ["#ff3b30", "🧾"], rent: ["#ff2d55", "🏠"], health: ["#ff2d55", "💊"],
-    fuel: ["#ffcc00", "⛽️"], entertainment: ["#ff375f", "🎬"], investments: ["#34c759", "📈"], salary: ["#34c759", "💼"],
-    education: ["#5ac8fa", "📚"], gifts: ["#ff2d55", "🎁"], family: ["#ff9500", "👪"],
-  };
-  const PALETTE = ["#ff9500", "#34c759", "#af52de", "#007aff", "#5856d6", "#ff2d55", "#30b0c7", "#a2845e", "#5ac8fa", "#ff3b30"];
+  // First keyword found in the lower-cased name wins, so more specific words come first.
+  const SUGGEST = [
+    [["coffee", "cafe"], "#a2845e", "☕️"],
+    [["food", "dining", "restaurant", "swiggy", "zomato", "lunch", "dinner"], "#ff9500", "🍜"],
+    [["grocer", "vegetable", "fruit", "bigbasket", "blinkit", "zepto"], "#34c759", "🥦"],
+    [["snack"], "#ff9500", "🍿"],
+    [["cloth", "fashion", "apparel"], "#af52de", "👕"],
+    [["shop", "amazon", "flipkart"], "#af52de", "🛍️"],
+    [["flight", "travel", "trip", "holiday", "vacation"], "#007aff", "✈️"],
+    [["hotel", "stay"], "#007aff", "🏨"],
+    [["fuel", "petrol", "diesel"], "#ffcc00", "⛽️"],
+    [["taxi", "cab", "uber", "ola", "auto", "transport", "commute", "metro"], "#007aff", "🚕"],
+    [["parking", "toll"], "#8e8e93", "🅿️"],
+    [["recharge", "mobile", "phone", "prepaid", "postpaid"], "#007aff", "📱"],
+    [["internet", "broadband", "wifi"], "#5ac8fa", "🌐"],
+    [["electric", "power"], "#ffcc00", "💡"],
+    [["water"], "#5ac8fa", "🚰"],
+    [["gas", "lpg", "cylinder"], "#ff9500", "🔥"],
+    [["rent", "house", "home"], "#ff2d55", "🏠"],
+    [["bill", "utilit"], "#ff3b30", "🧾"],
+    [["maint", "repair"], "#8e8e93", "🔧"],
+    [["subscri", "netflix", "spotify", "prime"], "#5856d6", "📺"],
+    [["movie", "entertain", "game"], "#ff375f", "🎬"],
+    [["health", "medic", "doctor", "pharma", "hospital"], "#ff2d55", "💊"],
+    [["gym", "fitness", "sport"], "#34c759", "🏋️"],
+    [["beauty", "salon", "spa", "groom"], "#ff2d55", "💇"],
+    [["school", "educat", "course", "book", "fees"], "#5ac8fa", "📚"],
+    [["kid", "baby", "child"], "#ff9500", "🧸"],
+    [["pet"], "#a2845e", "🐾"],
+    [["family", "parent"], "#ff9500", "👪"],
+    [["gift"], "#ff2d55", "🎁"],
+    [["donat", "charit"], "#34c759", "🤲"],
+    [["insur"], "#30b0c7", "🛡️"],
+    [["loan", "emi"], "#8e8e93", "🏦"],
+    [["card"], "#8e8e93", "💳"],
+    [["invest", "sip", "mutual", "stock"], "#34c759", "📈"],
+    [["saving"], "#34c759", "🐷"],
+    [["salary", "income"], "#34c759", "💼"],
+    [["cashback", "reward"], "#30b0c7", "💸"],
+    [["refund"], "#30b0c7", "↩️"],
+    [["transfer", "upi"], "#8e8e93", "↔︎"],
+    [["cash", "atm"], "#34c759", "💵"],
+    [["test"], "#8e8e93", "🧪"],
+  ];
+  const PALETTE = ["#ff9500", "#34c759", "#af52de", "#007aff", "#5856d6", "#ff2d55", "#30b0c7", "#a2845e", "#5ac8fa", "#ff3b30", "#ffcc00", "#8e8e93"];
+  const EMOJIS = ["🍜", "🥦", "☕️", "🍿", "🛍️", "👕", "✈️", "🚕", "⛽️", "📱", "🌐", "💡", "🧾", "🏠", "🔧", "📺",
+    "🎬", "💊", "🏋️", "💇", "📚", "🧸", "🐾", "👪", "🎁", "🛡️", "🏦", "💳", "📈", "💼", "💸", "↔︎", "💵", "🧪", "🏷️", "⭐️"];
   const UNTAGGED = ["#aeaeb2", "?"];
 
+  function suggestLook(name) {
+    const lower = name.toLowerCase();
+    const hit = SUGGEST.find(([words]) => words.some((w) => lower.includes(w)));
+    if (hit) return [hit[1], hit[2]];
+    let h = 0;
+    for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) | 0;
+    return [PALETTE[Math.abs(h) % PALETTE.length], "🏷️"];
+  }
+
+  // [colour, emoji]. A look being picked on the current screen shows before it is saved.
   function look(category) {
     if (!category) return UNTAGGED;
-    const known = KNOWN[category.toLowerCase()];
-    if (known) return known;
-    let h = 0;
-    for (const ch of category) h = (h * 31 + ch.charCodeAt(0)) | 0;
-    return [PALETTE[Math.abs(h) % PALETTE.length], esc(category[0].toUpperCase())];
+    const pending = state.previewLook;
+    if (pending && pending.name === category) return [pending.colour, pending.emoji];
+    const saved = state.categories[category];
+    return saved ? [saved.colour, saved.emoji] : suggestLook(category);
   }
   const colour = (category) => look(category)[0];
   const icon = (category, cls = "") => {
     const [c, glyph] = look(category);
     return `<span class="ic ${cls}" style="background:${c}">${glyph}</span>`;
   };
+  const startLook = (name) => {
+    const [c, emoji] = look(name);
+    return { name, emoji, colour: c };
+  };
+
+  function lookPicker(newLook) {
+    const emojis = EMOJIS.map((e) => `<button data-act="pick-emoji" data-value="${e}" style="${e === newLook.emoji ? `background:${newLook.colour}` : ""}">${e}</button>`).join("");
+    const swatches = PALETTE.map((c) => `<button data-act="pick-colour" data-value="${c}" class="${c === newLook.colour ? "on" : ""}" style="background:${c}"></button>`).join("");
+    return `<div class="sh">Icon for ${esc(newLook.name)}</div><div class="group pad"><div class="emojis">${emojis}</div><div class="swatches">${swatches}</div></div>`;
+  }
 
   // ---- State ----
 
@@ -55,6 +113,8 @@
     months: {},
     rules: [],
     compiled: [],
+    categories: {}, // saved looks: { name: { emoji, colour } }
+    previewLook: null, // { name, emoji, colour } being picked on the current screen
     unparsed: [],
     version: "",
     ym: null,
@@ -89,6 +149,7 @@
     const count = new Map();
     for (const rule of state.rules) if (rule.set && rule.set.category) count.set(rule.set.category, (count.get(rule.set.category) || 0) + 1);
     for (const tx of tagAll(state.compiled, allTx())) if (tx.category) count.set(tx.category, (count.get(tx.category) || 0) + 1);
+    for (const name of Object.keys(state.categories)) if (!count.has(name)) count.set(name, 0);
     for (const name of ["Food", "Groceries", "Shopping", "Travel", "Bills", "Subscriptions"]) if (!count.has(name)) count.set(name, 0);
     return [...count].sort((a, b) => b[1] - a[1]).map(([name]) => name);
   }
@@ -100,7 +161,7 @@
     const where = [tx.bank, tx.account ? "··" + tx.account : null].filter(Boolean).join(" ");
     const day = Number(tx.date.slice(8));
     return `<button class="li" data-act="open-tx" data-ym="${esc(tx.date.slice(0, 7))}" data-id="${esc(tx.id)}">${icon(tx.category)}
-      <div class="main"><div class="t1">${esc(shortName(recipient(tx)))}</div><div class="t2">${sub}${where ? " · " + esc(where) : ""}${tx.owner ? " · " + esc(tx.owner) : ""}</div></div>
+      <div class="main"><div class="t1">${esc(shortName(recipient(tx)))}</div><div class="t2">${sub}${where ? " · " + esc(where) : ""}</div></div>
       <div class="amt ${tx.amountPaise > 0 ? "in" : ""}">${tx.amountPaise > 0 ? "+" : ""}${esc(money(Math.abs(tx.amountPaise), tx.currency))}<small>${day} ${esc(monthName(tx.date.slice(0, 7)))}</small></div></button>`;
   }
 
@@ -195,7 +256,8 @@
     const list = periodTx();
     const shown = screen.filter === "all" ? list : screen.filter === "untagged" ? list.filter((t) => !t.category) : list.filter((t) => t.category === screen.filter);
     const title = screen.filter === "all" ? periodLabel() : screen.filter === "untagged" ? "Needs a Category" : screen.filter;
-    return `${backNav(title)}<div style="height:8px"></div>
+    const isCategory = screen.filter !== "all" && screen.filter !== "untagged";
+    return `${backNav(title, isCategory ? `<button data-act="see-trend" data-value="${esc(screen.filter)}">See Trend</button>` : "")}<div style="height:8px"></div>
       <div class="group">${shown.map(txRow).join("") || `<div class="empty">Nothing here</div>`}</div>`;
   }
 
@@ -218,7 +280,9 @@
       <div class="sh">Category</div>
       <div class="group">${rows}
         <div class="li plain"><input class="left" data-field="newCat" value="${esc(screen.newCat || "")}" placeholder="New category" autocapitalize="words">
-          <button class="link" data-act="add-cat">Add</button></div></div>
+          <button class="link" data-act="add-cat">Add</button></div>
+        ${screen.draft && !screen.newLook ? `<button class="li plain" data-act="edit-look"><span class="link">Change Icon for ${esc(screen.draft)}</span></button>` : ""}</div>
+      ${screen.newLook && screen.newLook.name === screen.draft ? lookPicker(screen.newLook) : ""}
       ${tx.merchant ? `<div class="group"><button class="li plain" data-act="toggle-always"><div class="main"><div class="t1" style="white-space:normal">Always tag ${esc(shortName(tx.merchant))} as ${esc(screen.draft || "…")}</div>
           <div class="t2">Applies to ${plural(sameMerchant, "transaction")} now and every future one</div></div><span class="toggle ${screen.always ? "on" : ""}"></span></button></div>` : ""}
       <div class="sh">Message</div>
@@ -236,7 +300,7 @@
     const manual = { ...(tx.manual || {}) };
     const payload = {};
     if (screen.always && tx.merchant) {
-      payload.rules = [{ when: { merchant: `^${escapeRegex(tx.merchant)}$` }, set: { category } }, ...state.rules];
+      payload.rules = [{ when: { merchant: recipientPattern([tx.merchant], true) }, set: { category } }, ...state.rules];
       delete manual.category;
     } else if (category === fromRules) {
       delete manual.category;
@@ -244,9 +308,20 @@
       manual.category = category;
     }
     if (JSON.stringify(manual) !== JSON.stringify(tx.manual || {})) payload.manual = { ym: screen.ym, id: tx.id, manual };
-    if (!payload.rules && !payload.manual) return back();
-    const detail = payload.rules ? `Every ${shortName(tx.merchant)} transaction is now ${category}.` : `This transaction is now ${category}.`;
-    commit(payload, payload.rules ? "Rule saved" : "Category saved", detail, { pop: true });
+    const lookChange = lookPayload(screen.newLook, category);
+    if (lookChange) payload.categories = lookChange;
+    if (!payload.rules && !payload.manual && !payload.categories) return back();
+    const detail = payload.rules ? `Every ${shortName(tx.merchant)} transaction is now ${category}.`
+      : payload.manual ? `This transaction is now ${category}.` : `${category} has a new icon.`;
+    commit(payload, payload.rules ? "Rule saved" : payload.manual ? "Category saved" : "Icon saved", detail, { pop: true });
+  }
+
+  // The whole categories map with `newLook` saved for `category`, or null when nothing changes.
+  function lookPayload(newLook, category) {
+    if (!newLook || newLook.name !== category) return null;
+    const saved = state.categories[category];
+    if (saved && saved.emoji === newLook.emoji && saved.colour === newLook.colour) return null;
+    return { ...state.categories, [category]: { emoji: newLook.emoji, colour: newLook.colour } };
   }
 
   // ---- More: capture by hand, unrecognised messages, update ----
@@ -450,11 +525,9 @@
         : when.minAmount != null ? `${rupees(when.minAmount)} or more` : `up to ${rupees(when.maxAmount)}`;
       parts.push(`amount is ${token(range, "#8e8e93")}`);
     }
-    const then = [];
-    if (set.category) then.push(`tag ${token(`${look(set.category)[1]} ${set.category}`, accent)}`);
-    if (set.owner) then.push(`owner ${token(set.owner, "#8e8e93")}`);
-    if (set.tags && set.tags.length) then.push(set.tags.map((t) => token("#" + t, "#8e8e93")).join(" "));
-    return `When ${parts.join(" and ") || "anything"}<br>then ${then.join(", ") || "nothing"}`;
+    const then = set.category ? `tag ${token(`${look(set.category)[1]} ${set.category}`, accent)}`
+      : `<span class="muted">nothing: owner and tags are no longer used, so this rule can go</span>`;
+    return `When ${parts.join(" and ") || "anything"}<br>then ${then}`;
   }
 
   function rulesView() {
@@ -466,44 +539,59 @@
       })
       .join("");
     return `<div class="nav"><span></span><span class="mid"></span><button class="end" data-act="new-rule" style="font-size:26px;line-height:1">＋</button></div>
-      <div class="large">Rules<small>Checked top to bottom. For category and owner, the first match wins.</small></div>
+      <div class="large">Rules<small>Checked top to bottom. The first rule that matches sets the category.</small></div>
       ${cards || `<div class="group"><div class="empty">No rules yet. Open a transaction, pick a category and turn on Always.</div></div>`}`;
   }
 
   // ---- Rule editor (grouped form) ----
 
+  // Plain-name patterns become "is" / "contains" plus name chips; anything else is kept as is.
   function fieldsFromRule(rule) {
     const when = rule.when || {};
-    const set = rule.set || {};
     const extra = {};
     for (const key of Object.keys(when)) if (!FORM_CONDITIONS.includes(key)) extra[key] = when[key];
+    let recipients = [], exact = false, words = [];
+    if (when.merchant != null) {
+      if (isPlainPattern(when.merchant)) ({ exact, words: recipients } = patternWords(when.merchant));
+      else extra.merchant = when.merchant;
+    }
+    if (when.text != null) {
+      const p = patternWords(when.text);
+      if (isPlainPattern(when.text) && !p.exact) words = p.words;
+      else extra.text = when.text;
+    }
     return {
       extra,
+      more: words.length > 0 || when.account != null,
+      newLook: null,
       fields: {
-        merchant: when.merchant || "", text: when.text || "", direction: when.direction || "",
+        recipients, exact, recipientInput: "", words, wordInput: "", direction: when.direction || "",
         minAmount: when.minAmount != null ? String(when.minAmount) : "", maxAmount: when.maxAmount != null ? String(when.maxAmount) : "",
-        account: when.account || "", category: set.category || "", owner: set.owner || "", tags: (set.tags || []).join(", "),
+        account: when.account || "", category: (rule.set || {}).category || "", catInput: "",
       },
     };
   }
+
+  // Names typed but not yet added with Add still count.
+  const withTyped = (list, typed) => (typed.trim() ? [...list, typed.trim()] : list);
 
   // Throws a readable message when a field is invalid.
   function ruleFromForm(screen) {
     const f = screen.fields;
     const when = { ...screen.extra };
-    for (const key of ["merchant", "text", "direction", "account"]) if (f[key].trim()) when[key] = f[key].trim();
+    const recipients = withTyped(f.recipients, f.recipientInput);
+    if (recipients.length) when.merchant = recipientPattern(recipients, f.exact);
+    const words = withTyped(f.words, f.wordInput);
+    if (words.length) when.text = recipientPattern(words, false);
+    if (f.direction) when.direction = f.direction;
+    if (f.account.trim()) when.account = f.account.trim();
     for (const key of ["minAmount", "maxAmount"]) {
       if (!f[key].trim()) continue;
       const n = Number(f[key].replace(/,/g, ""));
       if (!Number.isFinite(n) || n < 0) throw new Error(`${key === "minAmount" ? "Minimum" : "Maximum"} amount must be a number`);
       when[key] = n;
     }
-    const set = {};
-    if (f.category.trim()) set.category = f.category.trim();
-    if (f.owner.trim()) set.owner = f.owner.trim();
-    const tags = f.tags.split(",").map((t) => t.trim().replace(/^#/, "")).filter(Boolean);
-    if (tags.length) set.tags = tags;
-    const rule = { when, set };
+    const rule = { when, set: f.category ? { category: f.category } : {} };
     compileRules([rule]);
     return rule;
   }
@@ -527,33 +615,43 @@
     return `<div class="li plain"><span>${label}</span><input data-field="${name}" value="${esc(screen.fields[name])}" placeholder="${esc(placeholder)}" autocapitalize="off" autocorrect="off"></div>`;
   }
 
+  // Removable name chips plus an input with Add, for a list field ("recipients" or "words").
+  function nameList(screen, list, input, placeholder) {
+    const names = screen.fields[list];
+    const chips = names.map((w, i) => `<span class="namechip">${esc(w)}<button data-act="remove-word" data-list="${list}" data-i="${i}">×</button></span>`).join("");
+    return `${chips ? `<div class="namechips">${chips}</div>` : ""}
+      <div class="li plain"><input class="left" data-field="${input}" value="${esc(screen.fields[input])}" placeholder="${esc(names.length ? "Add another" : placeholder)}" autocapitalize="off" autocorrect="off">
+        <button class="link" data-act="add-word" data-list="${list}">Add</button></div>`;
+  }
+
   function ruleView(screen) {
-    const dir = screen.fields.direction;
-    const seg = [["out", "Out"], ["in", "In"], ["", "Either"]]
-      .map(([v, label]) => `<button data-act="dir" data-value="${v}" class="${dir === v ? "on" : ""}">${label}</button>`).join("");
-    const cats = knownCategories().slice(0, 10)
-      .map((name) => `<button data-act="rule-cat" data-value="${esc(name)}" class="${screen.fields.category === name ? "on" : ""}">${look(name)[1]} ${esc(name)}</button>`).join("");
+    const f = screen.fields;
+    const segOf = (act, options, current) => options.map(([v, label]) => `<button data-act="${act}" data-value="${v}" class="${current === v ? "on" : ""}">${label}</button>`).join("");
+    const choices = knownCategories().slice(0, 12);
+    if (f.category && !choices.includes(f.category)) choices.unshift(f.category);
+    const cats = choices.map((name) => `<button data-act="rule-cat" data-value="${esc(name)}" class="${f.category === name ? "on" : ""}">${look(name)[1]} ${esc(name)}</button>`).join("");
     const extra = Object.keys(screen.extra).length ? `<div class="sf" style="margin-top:-12px">Also keeps: ${esc(describeRule({ when: screen.extra }, rupees).replace(/ → .*$/, ""))}</div>` : "";
     const editing = screen.index != null;
     return `<div class="nav"><button data-act="back">Cancel</button><span class="mid">${editing ? "Edit Rule" : "New Rule"}</span><button class="end" data-act="save-rule"><b>Save</b></button></div>
       <div style="height:8px"></div>
-      <div class="sh">If</div>
+      <div class="sh">When</div>
       <div class="group">
-        ${field(screen, "merchant", "Recipient", "swiggy|zomato")}
-        ${field(screen, "text", "SMS mentions", "cashback")}
-        <div class="li plain"><span style="flex:1">Money</span><div class="seg">${seg}</div></div>
-        ${field(screen, "minAmount", "At least ₹", "any")}
-        ${field(screen, "maxAmount", "At most ₹", "any")}
-        ${field(screen, "account", "Account", "last digits")}
+        <div class="li plain"><span style="flex:1">Recipient</span><div class="seg">${segOf("match-mode", [["contains", "contains"], ["is", "is"]], f.exact ? "is" : "contains")}</div></div>
+        ${nameList(screen, "recipients", "recipientInput", "Name, e.g. Swiggy")}
+        <div class="li plain"><span style="flex:1">Money</span><div class="seg">${segOf("dir", [["out", "Out"], ["in", "In"], ["", "Either"]], f.direction)}</div></div>
+        <div class="li plain"><span>Amount ₹</span><input data-field="minAmount" value="${esc(f.minAmount)}" placeholder="from" inputmode="decimal"><span class="muted">to</span><input data-field="maxAmount" value="${esc(f.maxAmount)}" placeholder="any" inputmode="decimal" style="flex:0 0 72px"></div>
+        <button class="li plain" data-act="toggle-more"><span class="link" style="flex:1">${screen.more ? "Fewer conditions" : "More conditions"}</span></button>
+        ${screen.more ? `<div class="li plain"><span class="muted small" style="flex:1">SMS mentions</span></div>${nameList(screen, "words", "wordInput", "Word, e.g. cashback")}${field(screen, "account", "Account", "last digits")}` : ""}
       </div>
-      <div class="sf">Separate several recipients or words with |.</div>${extra}
-      <div class="sh">Then</div>
+      <div class="sf">${f.exact ? "<b>is</b>: the whole recipient name must match" : "<b>contains</b>: part of the name is enough, like swiggy in SWIGGY BANGALORE"}. Capital letters don't matter.</div>${extra}
+      <div class="sh">Then set category</div>
       <div class="group">
-        ${field(screen, "category", "Category", "Food")}
-        <div class="chips" style="padding-top:2px">${cats}</div>
-        ${field(screen, "owner", "Owner", "none")}
-        ${field(screen, "tags", "Tags", "none")}
+        <div class="chips" style="padding-top:12px">${cats}</div>
+        <div class="li plain"><input class="left" data-field="catInput" value="${esc(f.catInput)}" placeholder="New category" autocapitalize="words">
+          <button class="link" data-act="rule-new-cat">Add</button></div>
+        ${f.category && !screen.newLook ? `<button class="li plain" data-act="edit-look"><span class="link">Change Icon for ${esc(f.category)}</span></button>` : ""}
       </div>
+      ${screen.newLook && screen.newLook.name === f.category ? lookPicker(screen.newLook) : ""}
       <div id="preview">${previewHtml(screen)}</div>
       ${editing ? `<div class="group">
         ${screen.index > 0 ? `<button class="li plain" data-act="move-rule" data-value="-1"><span class="link">Move Up</span></button>` : ""}
@@ -566,14 +664,17 @@
     try {
       rule = ruleFromForm(screen);
       if (!Object.keys(rule.when).length) throw new Error("Add at least one condition.");
-      if (!Object.keys(rule.set).length) throw new Error("Set a category, owner or tag.");
+      if (!rule.set.category) throw new Error("Pick a category.");
     } catch (e) {
       return showDialog("Can't save yet", cleanError(e));
     }
     const next = state.rules.slice();
     if (screen.index == null) next.unshift(rule);
     else next[screen.index] = rule;
-    commit({ rules: next }, "Rule saved", describeRule(rule, rupees), { pop: true });
+    const payload = { rules: next };
+    const lookChange = lookPayload(screen.newLook, rule.set.category);
+    if (lookChange) payload.categories = lookChange;
+    commit(payload, "Rule saved", describeRule(rule, rupees), { pop: true });
   }
 
   // ---- Saving through Scriptable ----
@@ -581,6 +682,7 @@
   function commit(payload, title, detail, options = {}) {
     const undo = {};
     if (payload.rules) undo.rules = state.rules;
+    if (payload.categories) undo.categories = state.categories;
     if (payload.manual) {
       const tx = findTx(payload.manual.ym, payload.manual.id);
       undo.manual = { ...payload.manual, manual: (tx && tx.manual) || {} };
@@ -599,6 +701,7 @@
     state.months = data.months || {};
     state.unparsed = data.unparsed || [];
     state.version = data.version || "";
+    state.categories = data.categories || {};
     setRules(data.rules || []);
   }
 
@@ -623,6 +726,7 @@
     const txs = allTx();
     const before = txs.map((tx) => JSON.stringify(tagsFor(state.compiled, tx)));
     if (p.payload.rules) setRules(p.payload.rules);
+    if (p.payload.categories) state.categories = p.payload.categories;
     if (p.payload.manual) {
       const tx = findTx(p.payload.manual.ym, p.payload.manual.id);
       if (tx) tx.manual = p.payload.manual.manual;
@@ -667,6 +771,7 @@
       return;
     }
     const screen = top();
+    state.previewLook = (screen && screen.newLook) || null;
     const views = { tx: txView, list: listView, rule: ruleView, unparsed: unparsedView };
     const body = screen ? views[screen.type](screen) : { spending: spendingView, trends: trendsView, rules: rulesView, more: moreView }[state.tab]();
     const tabs = screen ? "" : `<nav class="tabbar">${["spending", "trends", "rules", "more"]
@@ -707,14 +812,56 @@
       const tx = tagAll(state.compiled, [findTx(el.dataset.ym, el.dataset.id)])[0];
       push({ type: "tx", ym: el.dataset.ym, id: tx.id, draft: tx.category, always: false });
     },
-    "pick-cat": (el) => { top().draft = el.dataset.value; render(); },
-    "add-cat": () => { const s = top(); if (s.newCat && s.newCat.trim()) { s.draft = s.newCat.trim(); s.newCat = ""; } render(); },
+    "pick-cat": (el) => { const s = top(); s.draft = el.dataset.value; if (s.newLook && s.newLook.name !== s.draft) s.newLook = null; render(); },
+    "add-cat": () => {
+      const s = top();
+      const name = (s.newCat || "").trim();
+      if (!name) return;
+      s.draft = name;
+      s.newCat = "";
+      s.newLook = state.categories[name] ? null : startLook(name);
+      render();
+    },
+    "edit-look": () => { const s = top(); s.newLook = startLook(s.type === "tx" ? s.draft : s.fields.category); render(); },
+    "pick-emoji": (el) => { top().newLook.emoji = el.dataset.value; render(); },
+    "pick-colour": (el) => { top().newLook.colour = el.dataset.value; render(); },
+    "see-trend": (el) => {
+      state.tab = "trends";
+      state.trends = "trends";
+      state.trendCategory = el.dataset.value;
+      state.stack = [];
+      render();
+      window.scrollTo(0, 0);
+    },
     "toggle-always": () => { top().always = !top().always; render(); },
     "save-tx": () => saveTx(top()),
     "new-rule": () => push({ type: "rule", index: null, ...fieldsFromRule({}) }),
     "edit-rule": (el) => { const i = Number(el.dataset.i); push({ type: "rule", index: i, ...fieldsFromRule(state.rules[i]) }); },
     dir: (el) => { top().fields.direction = el.dataset.value; render(); },
-    "rule-cat": (el) => { top().fields.category = el.dataset.value; render(); },
+    "rule-cat": (el) => { const s = top(); s.fields.category = el.dataset.value; if (s.newLook && s.newLook.name !== s.fields.category) s.newLook = null; render(); },
+    "rule-new-cat": () => {
+      const s = top();
+      const name = s.fields.catInput.trim();
+      if (!name) return;
+      s.fields.category = name;
+      s.fields.catInput = "";
+      s.newLook = state.categories[name] ? null : startLook(name);
+      render();
+    },
+    "match-mode": (el) => { top().fields.exact = el.dataset.value === "is"; render(); },
+    "toggle-more": () => { top().more = !top().more; render(); },
+    "add-word": (el) => {
+      const f = top().fields;
+      const list = el.dataset.list;
+      const input = list === "recipients" ? "recipientInput" : "wordInput";
+      const word = f[input].trim();
+      if (word && !f[list].some((w) => w.toLowerCase() === word.toLowerCase())) f[list].push(word);
+      f[input] = "";
+      render();
+      const box = app.querySelector(`[data-field="${input}"]`);
+      if (box) box.focus();
+    },
+    "remove-word": (el) => { top().fields[el.dataset.list].splice(Number(el.dataset.i), 1); render(); },
     "save-rule": () => saveRule(top()),
     "move-rule": (el) => {
       const s = top();
@@ -767,6 +914,15 @@
       screen.fields[name] = e.target.value;
       document.getElementById("preview").innerHTML = previewHtml(screen);
     }
+  });
+
+  const ENTER_ADDS = { newCat: "add-cat", catInput: "rule-new-cat", recipientInput: "add-word", wordInput: "add-word" };
+  app.addEventListener("keydown", (e) => {
+    const act = e.key === "Enter" && e.target.dataset && ENTER_ADDS[e.target.dataset.field];
+    if (!act) return;
+    e.preventDefault();
+    const list = e.target.dataset.field === "wordInput" ? "words" : "recipients";
+    actions[act]({ dataset: { list } });
   });
 
   function load(data) {

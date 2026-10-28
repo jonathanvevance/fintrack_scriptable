@@ -122,3 +122,13 @@ input::placeholder { color: var(--sec); }
 .up { color: var(--red); } .down { color: var(--green); }
 svg.line { display: block; width: 100%; margin-top: 12px; }
 svg.bubbles { display: block; width: 100%; max-height: 360px; }
+
+/* Rule editor name chips and the category icon picker */
+.namechips { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 16px 6px; }
+.namechip { display: inline-flex; align-items: center; gap: 4px; font-size: 15px; padding: 5px 6px 5px 12px; border-radius: 16px; background: var(--fill); }
+.namechip button { width: 22px; height: 22px; border-radius: 11px; text-align: center; color: var(--sec); font-size: 17px; line-height: 22px; }
+.emojis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.emojis button { height: 44px; border-radius: 12px; font-size: 24px; text-align: center; background: var(--fill); }
+.swatches { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.swatches button { width: 30px; height: 30px; border-radius: 15px; }
+.swatches button.on { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--text); }

@@ -1,7 +1,5 @@
 [
  { "when": { "direction": "in", "text": "cashback" }, "set": { "category": "Cashback" } },
  { "when": { "merchant": "swiggy|zomato", "direction": "out" }, "set": { "category": "Food" } },
- { "when": { "merchant": "uber|ola|rapido" }, "set": { "category": "Travel", "tags": ["commute"] } },
- { "when": { "account": "1234" }, "set": { "owner": "Partner" } },
- { "when": { "direction": "out", "minAmount": 10000 }, "set": { "tags": ["large"] } }
+ { "when": { "merchant": "uber|ola|rapido" }, "set": { "category": "Travel" } }
 ]

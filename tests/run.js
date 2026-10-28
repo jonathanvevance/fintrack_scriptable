@@ -10,7 +10,7 @@ function load(path) {
 
 const { parseSms, parseDate } = load("lib/parse.js");
 const { money, shiftMonth, totals, categoryTotals, merchantTotals, recurringPayments } = load("lib/format.js");
-const { compileRules, tagsFor, tagAll, describeRule } = load("lib/tags.js");
+const { compileRules, tagsFor, tagAll, describeRule, patternWords, isPlainPattern, recipientPattern } = load("lib/tags.js");
 
 let failures = 0;
 let count = 0;
@@ -214,18 +214,20 @@ eq(
 const rules = compileRules(JSON.parse(readFile("rules.example.json")));
 const tx = (fields) => ({ merchant: null, raw: "", bank: "SBI", template: "generic", account: null, currency: "INR", amountPaise: -100, ...fields });
 const tagged = (fields) => tagsFor(rules, tx(fields));
-eq("rule matches merchant pattern", tagged({ merchant: "SWIGGY" }), { category: "Food", owner: null, tags: [] });
+eq("rule matches merchant pattern", tagged({ merchant: "SWIGGY" }), { category: "Food" });
 eq("direction condition excludes money in", tagged({ merchant: "Swiggy", amountPaise: 100 }).category, null);
 eq("cashback from text and direction", tagged({ raw: "Rs. 599 credited to your CASHBACK SBI Card", amountPaise: 59900 }).category, "Cashback");
-eq("category and owner come from different rules", tagged({ merchant: "Uber", account: "1234" }), { category: "Travel", owner: "Partner", tags: ["commute"] });
-eq("tags combine across rules", tagged({ merchant: "Uber", amountPaise: -1500000 }).tags, ["commute", "large"]);
-eq("minAmount is in rupees", tagged({ amountPaise: -999900 }).tags, []);
+eq("minAmount is in rupees", tagsFor(compileRules([{ when: { minAmount: 10000 }, set: { category: "Big" } }]), tx({ amountPaise: -999900 })).category, null);
+eq("old owner/tags-only rules are skipped", tagsFor(compileRules([
+  { when: { account: "1234" }, set: { owner: "Partner", tags: ["x"] } },
+  { when: { account: "1234" }, set: { category: "Travel" } },
+]), tx({ account: "1234" })), { category: "Travel" });
 eq("first matching rule wins", tagsFor(compileRules([
   { when: { merchant: "^Amazon$" }, set: { category: "Shopping" } },
   { when: { merchant: "amazon" }, set: { category: "Other" } },
 ]), tx({ merchant: "Amazon" })).category, "Shopping");
 eq("manual value beats rules", tagged({ merchant: "Swiggy", manual: { category: "Party" } }).category, "Party");
-eq("empty rules tag nothing", tagsFor(compileRules([]), tx({})), { category: null, owner: null, tags: [] });
+eq("empty rules tag nothing", tagsFor(compileRules([]), tx({})), { category: null });
 eq("tagAll leaves stored list unchanged", (() => {
   const list = [tx({ merchant: "Zomato" })];
   return [tagAll(rules, list)[0].category, list[0].category];
@@ -237,9 +239,21 @@ eq("bad direction is rejected", compileError([{}, { when: { direction: "both" } 
 const rupees = (n) => money(n * 100);
 eq("describe merchant pattern", describeRule({ when: { direction: "out", merchant: "swiggy|zomato" }, set: { category: "Food" } }, rupees), 'Money out, recipient contains "swiggy" or "zomato" → Food');
 eq("describe exact merchant from Always tag", describeRule({ when: { merchant: "^AMAZON\\.IN$" }, set: { category: "Shopping" } }, rupees), 'Recipient is "AMAZON.IN" → Shopping');
-eq("describe text, account, owner and tags", describeRule({ when: { text: "cashback", account: "1234" }, set: { owner: "Wife", tags: ["perk"] } }, rupees), 'SMS mentions "cashback", account ··1234 → owner Wife, #perk');
-eq("describe amount range", describeRule({ when: { minAmount: 100, maxAmount: 10000 }, set: { tags: ["mid"] } }, rupees), "₹100 to ₹10,000 → #mid");
-eq("describe minimum only", describeRule({ when: { direction: "out", minAmount: 10000 }, set: { tags: ["large"] } }, rupees), "Money out, ₹10,000 or more → #large");
+eq("describe text and account", describeRule({ when: { text: "cashback", account: "1234" }, set: { category: "Cashback" } }, rupees), 'SMS mentions "cashback", account ··1234 → Cashback');
+eq("describe amount range", describeRule({ when: { minAmount: 100, maxAmount: 10000 }, set: { category: "Mid" } }, rupees), "₹100 to ₹10,000 → Mid");
+eq("describe minimum only", describeRule({ when: { direction: "out", minAmount: 10000 }, set: { category: "Large" } }, rupees), "Money out, ₹10,000 or more → Large");
+eq("describe old owner/tags rule", describeRule({ when: { account: "1234" }, set: { owner: "Wife" } }, rupees), "Account ··1234 → nothing");
+
+eq("plain: exact names", isPlainPattern("^Jio Prepaid Rech$|^AIRTEL$"), true);
+eq("plain: partial names", isPlainPattern("swiggy|zomato"), true);
+eq("plain: escaped dot is still a name", isPlainPattern("^AMAZON\\.IN$"), true);
+eq("not plain: wildcard", isPlainPattern("^AMZN.*"), false);
+eq("not plain: mixed exact and partial", isPlainPattern("^Amazon$|flipkart"), false);
+eq("not plain: empty alternative", isPlainPattern("swiggy|"), false);
+eq("recipientPattern exact escapes", recipientPattern(["AMAZON.IN", "Jio (Prepaid)"], true), "^AMAZON\\.IN$|^Jio \\(Prepaid\\)$");
+eq("recipientPattern partial", recipientPattern(["swiggy", "zomato"], false), "swiggy|zomato");
+eq("recipientPattern round trip", patternWords(recipientPattern(["A.B", "C+D"], true)), { exact: true, words: ["A.B", "C+D"] });
+eq("recipientPattern matches literally", new RegExp(recipientPattern(["A.B"], true), "i").test("AXB"), false);
 eq("describe empty rule", describeRule({}), "Every transaction → nothing");
 
 eq(
