@@ -11,6 +11,8 @@
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; background: var(--bg); color: var(--text); font: 17px -apple-system, system-ui, sans-serif; -webkit-text-size-adjust: 100%; }
 body { padding-top: env(safe-area-inset-top); }
+/* Marks where the page starts, under Scriptable's own Close / Share bar. */
+body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; z-index: 5; height: 1px; background: var(--sep); pointer-events: none; }
 button { font: inherit; color: inherit; background: none; border: none; padding: 0; text-align: inherit; cursor: pointer; }
 input { font: inherit; color: var(--text); background: none; border: none; outline: none; min-width: 0; }
 input::placeholder { color: var(--sec); }
