@@ -104,7 +104,7 @@
   function lookPicker(newLook) {
     const emojis = EMOJIS.map((e) => `<button data-act="pick-emoji" data-value="${e}" style="${e === newLook.emoji ? `background:${newLook.colour}` : ""}">${e}</button>`).join("");
     const swatches = PALETTE.map((c) => `<button data-act="pick-colour" data-value="${c}" class="${c === newLook.colour ? "on" : ""}" style="background:${c}"></button>`).join("");
-    return `<div class="sh">Icon for ${esc(newLook.name)}</div><div class="group pad"><div class="emojis">${emojis}</div><div class="swatches">${swatches}</div></div>`;
+    return `<div class="sh">Icon${newLook.name ? " for " + esc(newLook.name) : ""}</div><div class="group pad"><div class="emojis">${emojis}</div><div class="swatches">${swatches}</div></div>`;
   }
 
   // ---- State ----
@@ -154,6 +154,52 @@
     return [...count].sort((a, b) => b[1] - a[1]).map(([name]) => name);
   }
 
+  // Every category in use or with a saved look, busiest first:
+  // { name, rules, tx, hand (set by hand), paise (money out in state.ym) }.
+  function categoryUsage() {
+    const use = new Map();
+    const get = (name) => use.get(name) || use.set(name, { name, rules: 0, tx: 0, hand: 0, paise: 0 }).get(name);
+    for (const rule of state.rules) if (rule.set && rule.set.category) get(rule.set.category).rules++;
+    for (const tx of tagAll(state.compiled, allTx())) {
+      if (!tx.category) continue;
+      const u = get(tx.category);
+      u.tx++;
+      if (tx.manual && tx.manual.category === tx.category) u.hand++;
+      if (tx.date.startsWith(state.ym) && tx.currency === "INR" && tx.amountPaise < 0) u.paise -= tx.amountPaise;
+    }
+    for (const name of Object.keys(state.categories)) get(name);
+    return [...use.values()].sort((a, b) => b.tx - a.tx || a.name.localeCompare(b.name));
+  }
+  const usageOf = (name) => categoryUsage().find((u) => u.name === name) || { name, rules: 0, tx: 0, hand: 0, paise: 0 };
+
+  // Save payload that moves category `from` to `to` (rename or merge), or deletes it when `to` is
+  // null: its rules, hand-set transactions and saved look change together.
+  function moveCategory(from, to) {
+    const rules = [];
+    for (const rule of state.rules) {
+      if (!rule.set || rule.set.category !== from) rules.push(rule);
+      else if (to) rules.push({ ...rule, set: { ...rule.set, category: to } });
+    }
+    const manual = [];
+    for (const [ym, list] of Object.entries(state.months)) {
+      for (const tx of list) {
+        if (!tx.manual || tx.manual.category !== from) continue;
+        const next = { ...tx.manual };
+        if (to) next.category = to;
+        else delete next.category;
+        manual.push({ ym, id: tx.id, manual: next });
+      }
+    }
+    const categories = { ...state.categories };
+    const moved = categories[from];
+    delete categories[from];
+    if (to && moved && !categories[to]) categories[to] = moved;
+    const payload = { categories };
+    if (JSON.stringify(rules) !== JSON.stringify(state.rules)) payload.rules = rules;
+    if (manual.length) payload.manual = manual;
+    return payload;
+  }
+
   // ---- Shared pieces ----
 
   function txRow(tx) {
@@ -199,7 +245,7 @@
   }
 
   function backNav(title, end = "") {
-    const back = state.stack.length > 1 ? "Back" : { spending: "Spending", trends: "Trends", rules: "Rules", more: "More" }[state.tab];
+    const back = state.stack.length > 1 ? "Back" : TAB_LABELS[state.tab];
     return `<div class="nav"><button data-act="back">‹ ${esc(back)}</button><span class="mid">${esc(title)}</span><span class="end">${end}</span></div>`;
   }
 
@@ -210,7 +256,7 @@
     for (const tx of list) if (tx.currency === "INR" && tx.amountPaise < 0) counts.set(tx.category || null, (counts.get(tx.category || null) || 0) + 1);
     return categoryTotals(list)
       .map((c) => `<button class="li" data-act="open-list" data-filter="${esc(c.category || "untagged")}">${icon(c.category)}
-        <div class="main"><div class="t1">${esc(c.category || "Untagged")}</div><div class="t2">${plural(counts.get(c.category) || 0, "transaction")}</div></div>
+        <div class="main"><div class="t1">${esc(c.category || "No Category")}</div><div class="t2">${plural(counts.get(c.category) || 0, "transaction")}</div></div>
         <div class="amt">${esc(money(c.paise))}</div><span class="chev"></span></button>`)
       .join("");
   }
@@ -241,12 +287,17 @@
       ${state.year ? `<div class="group pad"><div class="muted small">Each month · tap one to open it</div>${yearBars(state.year)}</div>` : ""}
       ${cats.length ? `<div class="sh">Categories</div><div class="group">${categoryRows(list)}</div>` : ""}
       ${untagged ? `<button class="card attention" data-act="open-list" data-filter="untagged">${icon(null)}<div style="flex:1"><div style="font-weight:600">${plural(untagged, "transaction")} need a category</div>
-        <div class="muted small">Tag one and choose Always; FinTrack remembers.</div></div><span class="chev"></span></button>` : ""}
+        <div class="muted small">Pick a category and turn on Always; FinTrack remembers.</div></div><span class="chev"></span></button>` : ""}
       <div class="sh2">Latest ${list.length > 5 ? `<button data-act="open-list" data-filter="all">See All</button>` : ""}</div>
       <div class="group">${list.slice(0, 5).map(txRow).join("") || `<div class="empty">No transactions in ${esc(periodLabel())}</div>`}</div>`;
   }
 
   function listView(screen) {
+    if (screen.hand) {
+      const shown = tagAll(state.compiled, allTx()).filter((t) => t.manual && t.manual.category === screen.hand).sort((a, b) => (a.date < b.date ? 1 : -1));
+      return `${backNav("Set by Hand")}<div style="height:8px"></div>
+      <div class="group">${shown.map(txRow).join("") || `<div class="empty">Nothing here</div>`}</div>`;
+    }
     if (screen.merchant) {
       const all = screen.allTime ? tagAll(state.compiled, allTx()).sort((a, b) => (a.date < b.date ? 1 : -1)) : periodTx();
       const shown = all.filter((t) => recipient(t) === screen.merchant);
@@ -283,7 +334,7 @@
           <button class="link" data-act="add-cat">Add</button></div>
         ${screen.draft && !screen.newLook ? `<button class="li plain" data-act="edit-look"><span class="link">Change Icon for ${esc(screen.draft)}</span></button>` : ""}</div>
       ${screen.newLook && screen.newLook.name === screen.draft ? lookPicker(screen.newLook) : ""}
-      ${tx.merchant ? `<div class="group"><button class="li plain" data-act="toggle-always"><div class="main"><div class="t1" style="white-space:normal">Always tag ${esc(shortName(tx.merchant))} as ${esc(screen.draft || "…")}</div>
+      ${tx.merchant ? `<div class="group"><button class="li plain" data-act="toggle-always"><div class="main"><div class="t1" style="white-space:normal">Always put ${esc(shortName(tx.merchant))} in ${esc(screen.draft || "…")}</div>
           <div class="t2">Applies to ${plural(sameMerchant, "transaction")} now and every future one</div></div><span class="toggle ${screen.always ? "on" : ""}"></span></button></div>` : ""}
       <div class="sh">Message</div>
       <div class="group pad muted small" style="line-height:1.4;user-select:text;-webkit-user-select:text">${esc(tx.raw)}</div>
@@ -414,7 +465,7 @@
         series.get(c.category)[i] = c.paise;
       }
     });
-    if (!series.size) return `<div class="group"><div class="empty">Tag a few transactions to see how each category moves month to month.</div></div>`;
+    if (!series.size) return `<div class="group"><div class="empty">Give a few transactions a category to see how each category moves month to month.</div></div>`;
     const names = [...series.keys()].sort((a, b) => series.get(b).reduce((s, v) => s + v, 0) - series.get(a).reduce((s, v) => s + v, 0));
     const cat = series.has(state.trendCategory) ? state.trendCategory : names[0];
     const values = series.get(cat);
@@ -525,22 +576,104 @@
         : when.minAmount != null ? `${rupees(when.minAmount)} or more` : `up to ${rupees(when.maxAmount)}`;
       parts.push(`amount is ${token(range, "#8e8e93")}`);
     }
-    const then = set.category ? `tag ${token(`${look(set.category)[1]} ${set.category}`, accent)}`
+    const then = set.category ? `it's ${token(`${look(set.category)[1]} ${set.category}`, accent)}`
       : `<span class="muted">nothing: owner and tags are no longer used, so this rule can go</span>`;
     return `When ${parts.join(" and ") || "anything"}<br>then ${then}`;
   }
 
+  function ruleCard(rule, i, txs) {
+    const hits = txs.filter(state.compiled[i].matches).length;
+    return `<button class="sentence" data-act="edit-rule" data-i="${i}"><div class="lbl"><span>${plural(hits, "transaction")}</span><span>${i + 1}</span></div>${sentence(rule)}</button>`;
+  }
+
   function rulesView() {
     const txs = allTx();
-    const cards = state.rules
-      .map((rule, i) => {
-        const hits = txs.filter(state.compiled[i].matches).length;
-        return `<button class="sentence" data-act="edit-rule" data-i="${i}"><div class="lbl"><span>${plural(hits, "transaction")}</span><span>${i + 1}</span></div>${sentence(rule)}</button>`;
-      })
-      .join("");
+    const cards = state.rules.map((rule, i) => ruleCard(rule, i, txs)).join("");
+    const used = categoryUsage();
+    const glyphs = used.slice(0, 7).map((u) => look(u.name)[1]).join(" ") + (used.length > 7 ? ` +${used.length - 7}` : "");
     return `<div class="nav"><span></span><span class="mid"></span><button class="end" data-act="new-rule" style="font-size:26px;line-height:1">＋</button></div>
       <div class="large">Rules<small>Checked top to bottom. The first rule that matches sets the category.</small></div>
+      <div class="group"><button class="li" data-act="open-categories"><span class="ic" style="background:#ff9500">🏷️</span>
+        <div class="main"><div class="t1">Categories</div><div class="t2">${esc(glyphs || "None yet")}</div></div><span class="val">${used.length}</span><span class="chev"></span></button></div>
+      <div class="sh">Rules</div>
       ${cards || `<div class="group"><div class="empty">No rules yet. Open a transaction, pick a category and turn on Always.</div></div>`}`;
+  }
+
+  // ---- Categories: list, one category, merge ----
+
+  function categoriesView() {
+    const rows = categoryUsage()
+      .map((u) => `<button class="li" data-act="open-category" data-value="${esc(u.name)}">${icon(u.name)}
+        <div class="main"><div class="t1">${esc(u.name)}</div><div class="t2">${u.rules ? plural(u.rules, "rule") : "No rules"} · ${plural(u.tx, "transaction")}</div></div>
+        <div class="amt">${u.paise ? esc(money(u.paise)) : ""}</div><span class="chev"></span></button>`)
+      .join("");
+    return `${backNav("")}
+      <div class="large">Categories<small>Amounts are money out in ${esc(monthLabel(state.ym))}</small></div>
+      <div class="group">${rows || `<div class="empty">No categories yet</div>`}</div>
+      <div class="group"><button class="li plain" data-act="new-category"><span class="link">New Category</span></button></div>`;
+  }
+
+  // screen: { name (null for a new one), nameInput, newLook, showLook, lookTouched }
+  function categoryView(screen) {
+    const isNew = screen.name == null;
+    const lk = screen.newLook || startLook(screen.name);
+    const head = `<div style="text-align:center;padding:6px 16px 18px"><span class="ic xl" style="background:${lk.colour}">${lk.emoji}</span>
+      <div style="font-size:22px;font-weight:700">${esc(isNew ? screen.nameInput || "New Category" : screen.name)}</div>`;
+    const nameRow = `<div class="li plain"><span>Name</span><input data-field="nameInput" value="${esc(screen.nameInput)}" placeholder="e.g. Pets" autocapitalize="words"></div>`;
+    const nav = backNav("", `<button data-act="save-category"><b>${isNew ? "Save" : "Done"}</b></button>`);
+    if (isNew) {
+      return `${nav}${head}<div class="muted small">An icon is suggested from the name; pick another if you like.</div></div>
+        <div class="group">${nameRow}</div>${lookPicker(lk)}`;
+    }
+    const u = usageOf(screen.name);
+    const txs = allTx();
+    const cards = state.rules.map((rule, i) => (rule.set && rule.set.category === screen.name ? ruleCard(rule, i, txs) : "")).join("");
+    const others = categoryUsage().length > 1;
+    return `${nav}${head}<div class="muted">${esc(plural(u.tx, "transaction"))}${u.paise ? ` · ${esc(money(u.paise))} in ${esc(monthName(state.ym))}` : ""}</div></div>
+      <div class="group">${nameRow}
+        <button class="li plain" data-act="toggle-look"><div class="main"><div class="t1">Icon &amp; Colour</div></div>
+          <span class="val">${lk.emoji} <i class="swatch" style="background:${lk.colour}"></i></span><span class="chev ${screen.showLook ? "open" : ""}"></span></button></div>
+      ${screen.showLook ? lookPicker(lk) : ""}
+      <div class="sh">Rules that set ${esc(screen.name)}</div>
+      ${cards}
+      <div class="group"><button class="li plain" data-act="new-rule" data-category="${esc(screen.name)}"><span class="link">Add Rule for ${esc(screen.name)}</span></button></div>
+      <div class="group">
+        ${u.hand ? `<button class="li plain" data-act="open-hand" data-value="${esc(screen.name)}"><div class="main"><div class="t1">Set by Hand</div></div><span class="val">${u.hand}</span><span class="chev"></span></button>` : ""}
+        <button class="li plain" data-act="see-trend" data-value="${esc(screen.name)}"><span class="link">See Trend</span></button></div>
+      <div class="group">
+        ${others ? `<button class="li plain" data-act="merge-category"><span class="link">Merge into Another Category…</span></button>` : ""}
+        <button class="li plain" data-act="delete-category"><span class="danger">Delete ${esc(screen.name)}</span></button></div>
+      <div class="sf" style="margin-top:-12px">Deleting removes ${plural(u.rules, "rule")} that set it. Its transactions then need a category unless another rule matches.</div>`;
+  }
+
+  function saveCategory(screen) {
+    const name = (screen.nameInput || "").trim();
+    if (!name) return showDialog("Name needed", "Give the category a name.");
+    if (name.length > 40) return showDialog("Name too long", "Keep it to 40 characters.");
+    const taken = name !== screen.name && categoryUsage().some((u) => u.name.toLowerCase() === name.toLowerCase());
+    if (taken) return showDialog("Already exists", `There is already a category called ${name}.${screen.name == null ? "" : " Use Merge to combine them."}`);
+    if (screen.name == null) {
+      const [c, emoji] = screen.lookTouched ? [screen.newLook.colour, screen.newLook.emoji] : suggestLook(name);
+      return commit({ categories: { ...state.categories, [name]: { emoji, colour: c } } }, "Category added", `${name} is ready to pick.`, { pop: true });
+    }
+    if (name === screen.name) {
+      const change = lookPayload(screen.newLook, name);
+      if (!change) return back();
+      return commit({ categories: change }, "Icon saved", `${name} has a new icon.`, { pop: true });
+    }
+    const payload = moveCategory(screen.name, name);
+    const lk = screen.newLook || startLook(screen.name);
+    payload.categories[name] = { emoji: lk.emoji, colour: lk.colour };
+    commit(payload, "Category renamed", `${screen.name} is now ${name}.`, { pop: true });
+  }
+
+  function mergeView(screen) {
+    const rows = categoryUsage()
+      .filter((u) => u.name !== screen.from)
+      .map((u) => `<button class="li" data-act="merge-into" data-value="${esc(u.name)}">${icon(u.name)}<div class="main"><div class="t1">${esc(u.name)}</div></div><span class="chev"></span></button>`)
+      .join("");
+    return `${backNav("Merge Into")}<div class="sf" style="margin-top:8px">${esc(screen.from)}'s rules and hand-set transactions move to the category you pick.</div>
+      <div class="group">${rows}</div>`;
   }
 
   // ---- Rule editor (grouped form) ----
@@ -684,8 +817,8 @@
     if (payload.rules) undo.rules = state.rules;
     if (payload.categories) undo.categories = state.categories;
     if (payload.manual) {
-      const tx = findTx(payload.manual.ym, payload.manual.id);
-      undo.manual = { ...payload.manual, manual: (tx && tx.manual) || {} };
+      const before = (m) => ({ ...m, manual: (findTx(m.ym, m.id) || {}).manual || {} });
+      undo.manual = Array.isArray(payload.manual) ? payload.manual.map(before) : before(payload.manual);
     }
     state.pending = { payload, undo, title, detail, ...options };
     fintrack.send({ action: "save", ...payload });
@@ -727,16 +860,16 @@
     const before = txs.map((tx) => JSON.stringify(tagsFor(state.compiled, tx)));
     if (p.payload.rules) setRules(p.payload.rules);
     if (p.payload.categories) state.categories = p.payload.categories;
-    if (p.payload.manual) {
-      const tx = findTx(p.payload.manual.ym, p.payload.manual.id);
-      if (tx) tx.manual = p.payload.manual.manual;
+    for (const m of [].concat(p.payload.manual || [])) {
+      const tx = findTx(m.ym, m.id);
+      if (tx) tx.manual = m.manual;
     }
     const changed = txs.filter((tx, i) => JSON.stringify(tagsFor(state.compiled, tx)) !== before[i]).length;
-    if (p.pop) state.stack.pop();
+    state.stack.length = Math.max(0, state.stack.length - (p.pop === true ? 1 : p.pop || 0));
     if (!p.quiet) {
       state.dialog = {
         title: p.title,
-        text: `${p.detail}\n${plural(changed, "transaction")} re-tagged.`,
+        text: `${p.detail}\n${plural(changed, "transaction")} changed category.`,
         actions: p.isUndo ? [["OK", "close"]] : [["Undo", "undo"], ["OK", "close"]],
         undo: p.undo,
       };
@@ -758,6 +891,7 @@
     return `<div class="dim"><div class="alert"><div class="body"><h3>${esc(d.title)}</h3><p>${esc(d.text).replace(/\n/g, "<br>")}</p></div><div class="acts">${acts}</div></div></div>`;
   }
 
+  const TAB_LABELS = { spending: "Spending", trends: "Insights", rules: "Rules", more: "More" };
   const TAB_ICONS = {
     spending: '<svg viewBox="0 0 26 24"><rect x="1" y="4" width="24" height="16" rx="3.5"/><rect x="1" y="8" width="24" height="3" fill="var(--card)"/></svg>',
     trends: '<svg viewBox="0 0 26 24"><rect x="3" y="12" width="5" height="9" rx="1.5"/><rect x="10.5" y="6" width="5" height="15" rx="1.5"/><rect x="18" y="2" width="5" height="19" rx="1.5"/></svg>',
@@ -772,10 +906,10 @@
     }
     const screen = top();
     state.previewLook = (screen && screen.newLook) || null;
-    const views = { tx: txView, list: listView, rule: ruleView, unparsed: unparsedView };
+    const views = { tx: txView, list: listView, rule: ruleView, unparsed: unparsedView, categories: categoriesView, category: categoryView, merge: mergeView };
     const body = screen ? views[screen.type](screen) : { spending: spendingView, trends: trendsView, rules: rulesView, more: moreView }[state.tab]();
     const tabs = screen ? "" : `<nav class="tabbar">${["spending", "trends", "rules", "more"]
-      .map((id) => `<button data-act="tab" data-value="${id}" class="${state.tab === id ? "on" : ""}">${TAB_ICONS[id]}${id[0].toUpperCase() + id.slice(1)}</button>`).join("")}</nav>`;
+      .map((id) => `<button data-act="tab" data-value="${id}" class="${state.tab === id ? "on" : ""}">${TAB_ICONS[id]}${TAB_LABELS[id]}</button>`).join("")}</nav>`;
     app.innerHTML = `<div class="screen ${screen ? "no-tabs" : ""}">${body}</div>${tabs}${dialogView()}`;
     const strip = app.querySelector(".strip");
     const on = strip && strip.querySelector(".on");
@@ -823,8 +957,41 @@
       render();
     },
     "edit-look": () => { const s = top(); s.newLook = startLook(s.type === "tx" ? s.draft : s.fields.category); render(); },
-    "pick-emoji": (el) => { top().newLook.emoji = el.dataset.value; render(); },
-    "pick-colour": (el) => { top().newLook.colour = el.dataset.value; render(); },
+    "pick-emoji": (el) => { top().newLook.emoji = el.dataset.value; top().lookTouched = true; render(); },
+    "pick-colour": (el) => { top().newLook.colour = el.dataset.value; top().lookTouched = true; render(); },
+    "open-categories": () => push({ type: "categories" }),
+    "open-category": (el) => push({ type: "category", name: el.dataset.value, nameInput: el.dataset.value, newLook: null, showLook: false }),
+    "new-category": () => push({ type: "category", name: null, nameInput: "", newLook: { name: "", emoji: "🏷️", colour: "#8e8e93" }, showLook: true, lookTouched: false }),
+    "toggle-look": () => {
+      const s = top();
+      s.showLook = !s.showLook;
+      if (s.showLook && !s.newLook) s.newLook = startLook(s.name);
+      render();
+    },
+    "save-category": () => saveCategory(top()),
+    "open-hand": (el) => push({ type: "list", hand: el.dataset.value }),
+    "merge-category": () => push({ type: "merge", from: top().name }),
+    "merge-into": (el) => {
+      const from = top().from;
+      const to = el.dataset.value;
+      const u = usageOf(from);
+      showDialog(`Merge ${from} into ${to}?`, `${plural(u.rules, "rule")} and ${plural(u.hand, "hand-set transaction")} move to ${to}, and ${from} goes away.`,
+        [["Cancel", "close"], ["Merge", "merge-confirm", true]], { from, to });
+    },
+    "merge-confirm": () => {
+      const { from, to } = state.dialog;
+      state.dialog = null;
+      commit(moveCategory(from, to), "Categories merged", `${from} is now part of ${to}.`, { pop: 2 });
+    },
+    "delete-category": () => {
+      const name = top().name;
+      showDialog(`Delete ${name}?`, `${plural(usageOf(name).rules, "rule")} that set it will be removed.`, [["Cancel", "close"], ["Delete", "delete-category-confirm", true]], { name });
+    },
+    "delete-category-confirm": () => {
+      const { name } = state.dialog;
+      state.dialog = null;
+      commit(moveCategory(name, null), "Category deleted", `${name} is gone.`, { pop: true });
+    },
     "see-trend": (el) => {
       state.tab = "trends";
       state.trends = "trends";
@@ -835,7 +1002,7 @@
     },
     "toggle-always": () => { top().always = !top().always; render(); },
     "save-tx": () => saveTx(top()),
-    "new-rule": () => push({ type: "rule", index: null, ...fieldsFromRule({}) }),
+    "new-rule": (el) => push({ type: "rule", index: null, ...fieldsFromRule(el.dataset.category ? { set: { category: el.dataset.category } } : {}) }),
     "edit-rule": (el) => { const i = Number(el.dataset.i); push({ type: "rule", index: i, ...fieldsFromRule(state.rules[i]) }); },
     dir: (el) => { top().fields.direction = el.dataset.value; render(); },
     "rule-cat": (el) => { const s = top(); s.fields.category = el.dataset.value; if (s.newLook && s.newLook.name !== s.fields.category) s.newLook = null; render(); },
@@ -910,14 +1077,26 @@
     const screen = top();
     if (!name || !screen) return;
     if (screen.type === "tx") screen.newCat = e.target.value;
+    if (screen.type === "category") screen[name] = e.target.value;
     if (screen.type === "rule") {
       screen.fields[name] = e.target.value;
       document.getElementById("preview").innerHTML = previewHtml(screen);
     }
   });
 
+  // A new category's suggested icon follows its name until an icon is picked by hand.
+  app.addEventListener("change", (e) => {
+    const screen = top();
+    if (!screen || screen.type !== "category" || screen.name != null || screen.lookTouched) return;
+    const name = screen.nameInput.trim();
+    const [c, emoji] = name ? suggestLook(name) : ["#8e8e93", "🏷️"];
+    screen.newLook = { name, emoji, colour: c };
+    render();
+  });
+
   const ENTER_ADDS = { newCat: "add-cat", catInput: "rule-new-cat", recipientInput: "add-word", wordInput: "add-word" };
   app.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && e.target.dataset && e.target.dataset.field === "nameInput") return e.target.blur();
     const act = e.key === "Enter" && e.target.dataset && ENTER_ADDS[e.target.dataset.field];
     if (!act) return;
     e.preventDefault();
