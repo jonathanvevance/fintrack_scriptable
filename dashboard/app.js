@@ -121,6 +121,7 @@
     year: null, // "YYYY" when Spending shows a whole year instead of state.ym
     today: null, // the month FinTrack was opened in
     tab: "spending",
+    tabHistory: [], // tabs visited before this one, so a tab can offer "‹ previous tab"
     trends: "trends", // which view the Trends tab shows: trends | recurring | merchants
     trendCategory: null,
     trendMonths: 12,
@@ -242,6 +243,17 @@
     const max = Math.max(1, ...spent);
     return `<div class="bars">${yms.map((ym, i) => `<button data-act="month" data-ym="${ym}" ${hasMonth(ym) ? "" : "disabled"}>
       <div class="b" style="height:${Math.max(2, (spent[i] / max) * 100)}%"></div><div class="l">${monthName(ym)[0]}</div></button>`).join("")}</div>`;
+  }
+
+  function switchTab(tab) {
+    if (tab !== state.tab) state.tabHistory = [...state.tabHistory, state.tab].slice(-10);
+    state.tab = tab;
+    state.stack = [];
+  }
+  // Top-left of a tab: back to the tab you came from, so the spot under Scriptable's Close is ours.
+  function tabBack() {
+    const last = state.tabHistory[state.tabHistory.length - 1];
+    return last ? `<button data-act="tab-back">‹ ${esc(TAB_LABELS[last])}</button>` : "<span></span>";
   }
 
   function backNav(title, end = "") {
@@ -585,7 +597,7 @@
     const cards = state.rules.map((rule, i) => ruleCard(rule, i, txs)).join("");
     const used = categoryUsage();
     const glyphs = used.slice(0, 7).map((u) => look(u.name)[1]).join(" ") + (used.length > 7 ? ` +${used.length - 7}` : "");
-    return `<div class="nav"><span></span><span class="mid"></span><button class="end" data-act="new-rule" style="font-size:26px;line-height:1">＋</button></div>
+    return `<div class="nav">${tabBack()}<span class="mid"></span><button class="end" data-act="new-rule" style="font-size:26px;line-height:1">＋</button></div>
       <div class="large">Rules<small>Checked top to bottom. The first rule that matches sets the category.</small></div>
       <div class="group"><button class="li" data-act="open-categories"><span class="ic" style="background:#ff9500">🏷️</span>
         <div class="main"><div class="t1">Categories</div><div class="t2">${esc(glyphs || "None yet")}</div></div><span class="val">${used.length}</span><span class="chev"></span></button></div>
@@ -898,7 +910,8 @@
     const screen = top();
     state.previewLook = (screen && screen.newLook) || null;
     const views = { tx: txView, list: listView, rule: ruleView, unparsed: unparsedView, categories: categoriesView, category: categoryView, merge: mergeView };
-    const body = screen ? views[screen.type](screen) : { spending: spendingView, trends: trendsView, rules: rulesView, more: moreView }[state.tab]();
+    let body = screen ? views[screen.type](screen) : { spending: spendingView, trends: trendsView, rules: rulesView, more: moreView }[state.tab]();
+    if (!screen && state.tab !== "rules" && state.tabHistory.length) body = `<div class="nav">${tabBack()}<span class="mid"></span><span class="end"></span></div>${body}`;
     const tabs = screen ? "" : `<nav class="tabbar">${["spending", "trends", "rules", "more"]
       .map((id) => `<button data-act="tab" data-value="${id}" class="${state.tab === id ? "on" : ""}">${TAB_ICONS[id]}${TAB_LABELS[id]}</button>`).join("")}</nav>`;
     app.innerHTML = `<div class="screen ${screen ? "no-tabs" : ""}">${body}</div>${tabs}${dialogView()}`;
@@ -918,7 +931,13 @@
   }
 
   const actions = {
-    tab: (el) => { state.tab = el.dataset.value; state.stack = []; render(); window.scrollTo(0, 0); },
+    tab: (el) => { switchTab(el.dataset.value); render(); window.scrollTo(0, 0); },
+    "tab-back": () => {
+      state.tab = state.tabHistory.pop();
+      state.stack = [];
+      render();
+      window.scrollTo(0, 0);
+    },
     month: (el) => { state.ym = el.dataset.ym; state.year = null; render(); },
     year: (el) => { state.year = el.dataset.value; render(); },
     "trends-view": (el) => { state.trends = el.dataset.value; render(); window.scrollTo(0, 0); },
@@ -974,10 +993,9 @@
       commit(moveCategory(name, null), "Category deleted", `${name} is gone.`, { pop: true });
     },
     "see-trend": (el) => {
-      state.tab = "trends";
+      switchTab("trends");
       state.trends = "trends";
       state.trendCategory = el.dataset.value;
-      state.stack = [];
       render();
       window.scrollTo(0, 0);
     },
