@@ -330,7 +330,7 @@
         <div class="muted">${esc([when, tx.bank, tx.account ? "··" + tx.account : null].filter(Boolean).join(" · "))}</div></div>
       <div class="sh">Category</div>
       <div class="group">${rows}
-        <button class="li plain" data-act="new-category"><span class="link">New Category…</span></button></div>
+        <button class="li plain" data-act="open-categories"><span class="link">Manage Categories…</span></button></div>
       ${tx.merchant ? `<div class="group"><button class="li plain" data-act="toggle-always"><div class="main"><div class="t1" style="white-space:normal">Always put ${esc(shortName(tx.merchant))} in ${esc(screen.draft || "…")}</div>
           <div class="t2">Applies to ${plural(sameMerchant, "transaction")} now and every future one</div></div><span class="toggle ${screen.always ? "on" : ""}"></span></button></div>` : ""}
       <div class="sh">Message</div>
@@ -649,9 +649,9 @@
     if (screen.name == null) {
       const [c, emoji] = screen.lookTouched ? [screen.newLook.colour, screen.newLook.emoji] : suggestLook(name);
       const from = state.stack[state.stack.length - 2];
-      const usedFrom = from && (from.type === "tx" || from.type === "rule");
+      const fromRule = from && from.type === "rule";
       return commit({ categories: { ...state.categories, [name]: { emoji, colour: c } } }, "Category added", `${name} is ready to pick.`,
-        { pop: true, quiet: usedFrom, after: usedFrom ? () => useNewCategory(name) : null });
+        { pop: true, quiet: fromRule, after: fromRule ? () => { top().fields.category = name; } : null });
     }
     if (name === screen.name) {
       const change = lookPayload(screen.newLook, name);
@@ -662,24 +662,6 @@
     const lk = screen.newLook || startLook(screen.name);
     payload.categories[name] = { emoji: lk.emoji, colour: lk.colour };
     commit(payload, "Category renamed", `${screen.name} is now ${name}.`, { pop: true });
-  }
-
-  // Back on the transaction or rule that opened New Category: select it, and for a transaction ask
-  // whether it is for this one only or a rule for every transaction to that recipient.
-  function useNewCategory(name) {
-    const s = top();
-    if (s.type === "rule") {
-      s.fields.category = name;
-      return;
-    }
-    s.draft = name;
-    const tx = findTx(s.ym, s.id);
-    if (!tx.merchant) return;
-    state.dialog = {
-      title: `Put ${shortName(tx.merchant)} in ${name}?`,
-      text: `Just this transaction, or every ${shortName(tx.merchant)} transaction from now on (a rule)?`,
-      actions: [["Just This One", "tx-once"], ["Always", "tx-always"]],
-    };
   }
 
   function mergeView(screen) {
@@ -1000,8 +982,6 @@
       window.scrollTo(0, 0);
     },
     "toggle-always": () => { top().always = !top().always; render(); },
-    "tx-once": () => { state.dialog = null; top().always = false; saveTx(top()); },
-    "tx-always": () => { state.dialog = null; top().always = true; saveTx(top()); },
     "save-tx": () => saveTx(top()),
     "new-rule": (el) => push({ type: "rule", index: null, ...fieldsFromRule(el.dataset.category ? { set: { category: el.dataset.category } } : {}) }),
     "edit-rule": (el) => { const i = Number(el.dataset.i); push({ type: "rule", index: i, ...fieldsFromRule(state.rules[i]) }); },
