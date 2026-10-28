@@ -277,6 +277,7 @@
     const list = periodTx();
     const t = totals(list);
     const spent = (t.INR || { out: 0 }).out;
+    const received = (t.INR || { in: 0 }).in;
     let note;
     if (state.year) {
       const months = yearMonths(state.year).filter(hasMonth).length;
@@ -295,7 +296,8 @@
       <div class="group pad" style="display:flex;align-items:center;gap:16px">${cats.length ? ring(cats) : ""}
         <div style="min-width:0"><div class="muted">Spent in ${esc(state.year || monthName(state.ym))}</div>
           <div class="big">${esc(money(spent))}</div>
-          <div class="muted small">${esc([note, foreign.length ? "also " + foreign.join(", ") : ""].filter(Boolean).join(" · ") || "\u00a0")}</div></div></div>
+          <div class="muted small">${esc([note, foreign.length ? "also " + foreign.join(", ") : ""].filter(Boolean).join(" · ") || "\u00a0")}</div>
+          ${received ? `<button class="received" data-act="open-list" data-filter="received">Received <b class="in">${esc(money(received))}</b><span class="chev"></span></button>` : ""}</div></div>
       ${state.year ? `<div class="group pad"><div class="muted small">Each month · tap one to open it</div>${yearBars(state.year)}</div>` : ""}
       ${cats.length ? `<div class="sh">Categories</div><div class="group">${categoryRows(list)}</div>` : ""}
       ${untagged ? `<button class="card attention" data-act="open-list" data-filter="untagged">${icon(null)}<div style="flex:1"><div style="font-weight:600">${plural(untagged, "transaction")} need a category</div>
@@ -317,9 +319,14 @@
       <div class="group">${shown.map(txRow).join("") || `<div class="empty">Nothing here</div>`}</div>`;
     }
     const list = periodTx();
-    const shown = screen.filter === "all" ? list : screen.filter === "untagged" ? list.filter((t) => !t.category) : list.filter((t) => t.category === screen.filter);
-    const title = screen.filter === "all" ? periodLabel() : screen.filter === "untagged" ? "Needs a Category" : screen.filter;
-    const isCategory = screen.filter !== "all" && screen.filter !== "untagged" && state.tab !== "trends";
+    const special = {
+      all: [periodLabel(), () => true],
+      untagged: ["Needs a Category", (t) => !t.category],
+      received: [`Received · ${periodLabel()}`, (t) => t.amountPaise > 0],
+    }[screen.filter];
+    const shown = list.filter(special ? special[1] : (t) => t.category === screen.filter);
+    const title = special ? special[0] : screen.filter;
+    const isCategory = !special && state.tab !== "trends";
     return `${backNav(title, isCategory ? `<button data-act="see-trend" data-value="${esc(screen.filter)}">See Trend</button>` : "")}<div style="height:8px"></div>
       <div class="group">${shown.map(txRow).join("") || `<div class="empty">Nothing here</div>`}</div>`;
   }
@@ -337,6 +344,7 @@
     const when = `${Number(tx.date.slice(8))} ${monthLabel(tx.date.slice(0, 7))}`;
     return `${backNav("", `<button data-act="save-tx"><b>Save</b></button>`)}
       <div style="text-align:center;padding:6px 16px 18px">${icon(screen.draft, "xl")}
+        ${tx.merchant ? `<div class="muted small">${tx.amountPaise > 0 ? "Received from" : "Paid to"}</div>` : ""}
         <div style="font-size:22px;font-weight:700">${esc(recipient(tx))}</div>
         <div class="big ${tx.amountPaise > 0 ? "in" : ""}" style="font-size:40px">${esc(money(Math.abs(tx.amountPaise), tx.currency))}</div>
         <div class="muted">${esc([when, tx.bank, tx.account ? "··" + tx.account : null].filter(Boolean).join(" · "))}</div></div>
@@ -453,7 +461,7 @@
   }
 
   function trendsView() {
-    const views = [["trends", "Trends"], ["recurring", "Recurring"], ["merchants", "Recipients"]];
+    const views = [["trends", "Trends"], ["recurring", "Recurring"], ["merchants", "Paid To"]];
     const seg = `<div class="seg wide">${views.map(([v, label]) => `<button data-act="trends-view" data-value="${v}" class="${state.trends === v ? "on" : ""}">${label}</button>`).join("")}</div>`;
     const body = { trends: categoryTrend, recurring: recurringList, merchants: merchantBubbles }[state.trends]();
     return `<div class="large first">Insights</div>${seg}${body}`;
@@ -513,7 +521,7 @@
         <div class="muted small">${plural(items.length, "recurring payment")} · ${esc(money(monthly * 12))} a year</div></div>
       ${coming.length ? `<div class="sh">Coming up</div><div class="group">${coming.map(row).join("")}</div>` : ""}
       ${paid.length ? `<div class="sh">Paid this month</div><div class="group">${paid.map(row).join("")}</div>` : ""}
-      <div class="sf">Spotted automatically: the same recipient, a similar amount and around the same day each month.</div>`;
+      <div class="sf">Spotted automatically: paid to the same name, a similar amount and around the same day each month.</div>`;
   }
 
   // Circles sized by spend, packed outward from the biggest; the viewBox is fitted afterwards.
@@ -554,7 +562,7 @@
     return `${monthStrip()}
       <div class="group" style="padding:6px"><svg class="bubbles" viewBox="${x0} ${y0} ${x1 - x0} ${y1 - y0}">${svg}</svg></div>
       <div class="group">${row(picked)}</div>
-      <div class="sh">All recipients · ${esc(periodLabel())}</div><div class="group">${list.map(row).join("")}</div>`;
+      <div class="sh">Everyone you paid · ${esc(periodLabel())}</div><div class="group">${list.map(row).join("")}</div>`;
   }
 
   // ---- Rules (Shortcuts-style sentences) ----
@@ -568,8 +576,16 @@
     const set = rule.set || {};
     const accent = colour(set.category);
     const parts = [];
-    if (when.direction) parts.push(`money goes ${token(when.direction, when.direction === "in" ? "var(--green)" : "var(--red)")}`);
-    for (const [key, label] of [["merchant", "recipient"], ["text", "SMS"], ["bank", "bank"], ["template", "template"]]) {
+    const paid = { out: "paid", in: "received" }[when.direction];
+    const paidToken = paid ? token(paid, when.direction === "in" ? "var(--green)" : "var(--red)") : "";
+    if (when.merchant != null) {
+      const { exact, words } = patternWords(when.merchant);
+      const lead = paid ? `${paidToken} ${when.direction === "out" ? "to" : "from"}` : "paid to or received from";
+      parts.push(`${lead} ${exact ? "" : "a name containing "}${words.map((w) => token(w, accent)).join(" or ")}`);
+    } else if (paid) {
+      parts.push(paidToken);
+    }
+    for (const [key, label] of [["text", "the SMS"], ["bank", "bank"], ["template", "template"]]) {
       if (when[key] == null) continue;
       const { exact, words } = patternWords(when[key]);
       const verb = exact ? "is" : key === "text" ? "mentions" : "contains";
@@ -614,7 +630,7 @@
         <div class="amt">${u.paise ? esc(money(u.paise)) : ""}</div><span class="chev"></span></button>`)
       .join("");
     return `${backNav("")}
-      <div class="large">Categories<small>Amounts are money out in ${esc(monthLabel(state.ym))}</small></div>
+      <div class="large">Categories<small>Amounts are what you paid in ${esc(monthLabel(state.ym))}</small></div>
       <div class="group">${rows || `<div class="empty">No categories yet</div>`}</div>
       <div class="group"><button class="li plain" data-act="new-category"><span class="link">New Category</span></button></div>`;
   }
@@ -777,14 +793,14 @@
       <div style="height:8px"></div>
       <div class="sh">When</div>
       <div class="group">
-        <div class="li plain"><span style="flex:1">Recipient</span><div class="seg">${segOf("match-mode", [["contains", "contains"], ["is", "is"]], f.exact ? "is" : "contains")}</div></div>
+        <div class="li plain"><span style="flex:1">Money</span><div class="seg">${segOf("dir", [["out", "Paid"], ["in", "Received"], ["", "Either"]], f.direction)}</div></div>
+        <div class="li plain"><span style="flex:1">${{ out: "Paid to", in: "Received from" }[f.direction] || "To or from"}</span><div class="seg">${segOf("match-mode", [["contains", "contains"], ["is", "is"]], f.exact ? "is" : "contains")}</div></div>
         ${nameList(screen, "recipients", "recipientInput", "Name, e.g. Swiggy")}
-        <div class="li plain"><span style="flex:1">Money</span><div class="seg">${segOf("dir", [["out", "Out"], ["in", "In"], ["", "Either"]], f.direction)}</div></div>
         <div class="li plain"><span>Amount ₹</span><input data-field="minAmount" value="${esc(f.minAmount)}" placeholder="from" inputmode="decimal"><span class="muted">to</span><input data-field="maxAmount" value="${esc(f.maxAmount)}" placeholder="any" inputmode="decimal" style="flex:0 0 72px"></div>
         <button class="li plain" data-act="toggle-more"><span class="link" style="flex:1">${screen.more ? "Fewer conditions" : "More conditions"}</span></button>
         ${screen.more ? `<div class="li plain"><span class="muted small" style="flex:1">SMS mentions</span></div>${nameList(screen, "words", "wordInput", "Word, e.g. cashback")}${field(screen, "account", "Account", "last digits")}` : ""}
       </div>
-      <div class="sf">${f.exact ? "<b>is</b>: the whole recipient name must match" : "<b>contains</b>: part of the name is enough, like swiggy in SWIGGY BANGALORE"}. Capital letters don't matter.</div>${extra}
+      <div class="sf">${f.exact ? "<b>is</b>: the whole name must match" : "<b>contains</b>: part of the name is enough, like swiggy in SWIGGY BANGALORE"}. Capital letters don't matter.</div>${extra}
       <div class="sh">Then set category</div>
       <div class="group">
         <div class="chips" style="padding-top:12px">${cats}</div>

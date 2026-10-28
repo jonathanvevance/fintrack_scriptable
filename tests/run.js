@@ -247,11 +247,11 @@ eq("unknown condition is rejected", compileError([{ when: { merchnat: "x" } }]),
 eq("bad direction is rejected", compileError([{}, { when: { direction: "both" } }]), 'rules.json rule 2: direction must be "in" or "out", got both');
 
 const rupees = (n) => money(n * 100);
-eq("describe merchant pattern", describeRule({ when: { direction: "out", merchant: "swiggy|zomato" }, set: { category: "Food" } }, rupees), 'Money out, recipient contains "swiggy" or "zomato" → Food');
-eq("describe exact merchant from Always tag", describeRule({ when: { merchant: "^AMAZON\\.IN$" }, set: { category: "Shopping" } }, rupees), 'Recipient is "AMAZON.IN" → Shopping');
+eq("describe merchant pattern", describeRule({ when: { direction: "out", merchant: "swiggy|zomato" }, set: { category: "Food" } }, rupees), 'Paid to a name containing "swiggy" or "zomato" → Food');
+eq("describe exact merchant from Always tag", describeRule({ when: { merchant: "^AMAZON\\.IN$" }, set: { category: "Shopping" } }, rupees), 'Paid to or received from "AMAZON.IN" → Shopping');
 eq("describe text and account", describeRule({ when: { text: "cashback", account: "1234" }, set: { category: "Cashback" } }, rupees), 'SMS mentions "cashback", account ··1234 → Cashback');
 eq("describe amount range", describeRule({ when: { minAmount: 100, maxAmount: 10000 }, set: { category: "Mid" } }, rupees), "₹100 to ₹10,000 → Mid");
-eq("describe minimum only", describeRule({ when: { direction: "out", minAmount: 10000 }, set: { category: "Large" } }, rupees), "Money out, ₹10,000 or more → Large");
+eq("describe minimum only", describeRule({ when: { direction: "out", minAmount: 10000 }, set: { category: "Large" } }, rupees), "Paid, ₹10,000 or more → Large");
 eq("describe old owner/tags rule", describeRule({ when: { account: "1234" }, set: { owner: "Wife" } }, rupees), "Account ··1234 → nothing");
 
 eq("plain: exact names", isPlainPattern("^Jio Prepaid Rech$|^AIRTEL$"), true);
@@ -264,6 +264,7 @@ eq("recipientPattern exact escapes", recipientPattern(["AMAZON.IN", "Jio (Prepai
 eq("recipientPattern partial", recipientPattern(["swiggy", "zomato"], false), "swiggy|zomato");
 eq("recipientPattern round trip", patternWords(recipientPattern(["A.B", "C+D"], true)), { exact: true, words: ["A.B", "C+D"] });
 eq("recipientPattern matches literally", new RegExp(recipientPattern(["A.B"], true), "i").test("AXB"), false);
+eq("describe money in from a name", describeRule({ when: { direction: "in", merchant: "^SBI Card Cashback$" }, set: { category: "Cashback" } }, rupees), 'Received from "SBI Card Cashback" → Cashback');
 eq("describe empty rule", describeRule({}), "Every transaction → nothing");
 
 eq(
