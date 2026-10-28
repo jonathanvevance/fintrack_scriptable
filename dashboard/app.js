@@ -484,15 +484,14 @@
   function accountsView() {
     const openBank = (i, glyph, title, sub) => `<button class="li" data-act="open-bank" data-i="${i}">${bankIcon(state.accounts[i].bank, glyph)}
       <div class="main"><div class="t1">${esc(title)}</div><div class="t2">${esc(sub)}</div></div><span class="chev"></span></button>`;
-    const banks = state.accounts.map((b, i) => (b.account ? openBank(i, "🏦", accountLabel(b.bank, b.account), plural(b.account.upi.length, "UPI ID"))
-      : (b.cards || []).length ? "" : openBank(i, "🏦", b.bank, "No account or card yet"))).join("");
-    const cards = state.accounts.map((b, i) => (b.cards || [])
-      .map((c) => openBank(i, "💳", accountLabel(b.bank, c), c.bills.length ? `Bill shows as ${c.bills.join(", ")}` : "No bill name yet")).join("")).join("");
+    const sections = state.accounts.map((b, i) => {
+      const rows = (b.account ? openBank(i, "🏦", accountLabel("", b.account).trim(), plural(b.account.upi.length, "UPI ID")) : "") +
+        (b.cards || []).map((c) => openBank(i, "💳", accountLabel("", c).trim(), c.bills.length ? `Bill shows as ${c.bills.join(", ")}` : "No bill name yet")).join("");
+      return `<div class="sh">${esc(b.bank)}</div><div class="group">${rows || openBank(i, "🏦", b.bank, "No account or card yet")}</div>`;
+    }).join("");
     return `${backNav("", `<button data-act="add-bank" style="font-size:26px;line-height:1">＋</button>`)}
       <div class="large">My Accounts</div>
-      ${banks ? `<div class="sh">Bank accounts</div><div class="group">${banks}</div>` : ""}
-      ${cards ? `<div class="sh">Cards</div><div class="group">${cards}</div>` : ""}
-      ${banks || cards ? "" : `<div class="group"><div class="empty">Add the banks you use with ＋.</div></div>`}
+      ${sections || `<div class="group"><div class="empty">Add the banks you use with ＋.</div></div>`}
       <div class="sf">Payments to or from your UPI IDs, and card bill payments, are self transfers: not counted as spending or money received.
         Saved in FinTrack's iCloud folder with your transactions, never in the FinTrack code.</div>`;
   }
@@ -529,7 +528,11 @@
         <div class="li plain"><span>Last 4 digits</span>${last4Input(d.account.last4)}</div>
         <div class="li plain"><span>Name</span><input data-field="accountName" value="${esc(d.account.name)}" placeholder="e.g. Savings" autocapitalize="words"></div></div>
       <div class="sh">UPI IDs on this account</div>
-      <div class="group">${chipList(d.account.upi, "remove-upi", "upiInput", screen.upiInput, "add-upi", "e.g. name@okhsbc")}</div>
+      <div class="group">${d.account.upi.map((id, i) => `<div class="li plain"><div class="main"><div class="t1">${esc(id)}</div></div>
+          <button class="danger" data-act="remove-upi" data-i="${i}">Remove</button></div>`).join("")}
+        ${screen.addingUpi ? `<div class="li plain"><input class="left" data-field="upiInput" value="${esc(screen.upiInput)}" placeholder="e.g. name@okhsbc" autocapitalize="off" autocorrect="off">
+          <button class="link" data-act="add-upi">Add</button></div>`
+          : `<button class="li plain" data-act="start-upi"><span class="link">Add UPI ID</span></button>`}</div>
       <div class="sf">Money sent to or received from these counts as a self transfer. Each UPI app can give the account its own ID; add them all.</div>
       <div class="group"><button class="li plain" data-act="remove-account"><span class="danger">Remove Account</span></button></div>`
       : `<div class="group"><button class="li plain" data-act="add-account"><span class="link">Add Account</span></button></div>
@@ -1275,6 +1278,12 @@
       if (box) box.focus();
     },
     "remove-upi": (el) => { top().draft.account.upi.splice(Number(el.dataset.i), 1); render(); },
+    "start-upi": () => {
+      top().addingUpi = true;
+      render();
+      const box = app.querySelector('[data-field="upiInput"]');
+      if (box) box.focus();
+    },
     "save-bank": () => {
       const s = top();
       const bank = bankFromScreen(s);
