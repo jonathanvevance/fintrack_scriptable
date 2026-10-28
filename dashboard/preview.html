@@ -23,6 +23,7 @@
     ["Uber", -27600, "ICICI", "246"], ["BLUE TOKAI", -34000, "HDFC", "5678"], ["THIRD WAVE COFFEE", -41000, "ICICI", "246"],
     ["Google", -29900, "ICICI", "246"], ["RAHUL K", -3000000, "SBI", "4321"], ["BIGBASKET", -184500, "SBI", "1234"],
   ];
+  const BILLS = [["NETFLIX", -64900, 3], ["HOUSE RENT", -2500000, 1], ["AIRTEL", -99900, 12, true], ["BESCOM", -185000, 18, true], ["SPOTIFY", -11900, 30, true]];
   const months = {};
   for (let back = 0; back < 6; back++) {
     const d = new Date(2026, 9 - back, 1);
@@ -34,6 +35,13 @@
       list.push({ id: `${ym}-${i}`, date: `${ym}-${day}`, merchant, bank, account, currency: "INR",
         amountPaise: Math.round(paise * (1 + ((i + back) % 3) / 10)), template: "generic", confidence: "high",
         raw: `Rs ${-paise / 100} debited from A/c XX${account} towards ${merchant}`, capturedAt: `${ym}-${day}T10:00:00Z` });
+    });
+    BILLS.forEach(([merchant, paise, day, skipNow], i) => {
+      if (back === 0 && skipNow) return;
+      const date = `${ym}-${String(day).padStart(2, "0")}`;
+      list.push({ id: `${ym}-bill${i}`, date, merchant, bank: "SBI", account: "8948", currency: "INR",
+        amountPaise: merchant === "BESCOM" ? Math.round(paise * (1 + (back % 3) / 20)) : paise, template: "generic", confidence: "high",
+        raw: `Rs ${-paise / 100} debited from A/c XX8948 towards ${merchant}`, capturedAt: `${date}T10:00:00Z` });
     });
     list.push({ id: `${ym}-cb`, date: `${ym}-21`, merchant: null, bank: "SBI", account: null, currency: "INR", amountPaise: 59900,
       template: "generic", confidence: "low", raw: "It's Cashback Time! Rs. 599 has been credited to your CASHBACK SBI Card account", capturedAt: `${ym}-21T10:00:00Z` });
@@ -47,6 +55,8 @@
     { when: { merchant: "uber|ola|rapido" }, set: { category: "Travel", tags: ["commute"] } },
     { when: { merchant: "^Amazon$" }, set: { category: "Shopping" } },
     { when: { merchant: "^Google$" }, set: { category: "Subscriptions" } },
+    { when: { merchant: "netflix|spotify" }, set: { category: "Subscriptions" } },
+    { when: { merchant: "airtel|bescom|rent" }, set: { category: "Bills" } },
     { when: { merchant: "^BIGBASKET$" }, set: { category: "Groceries" } },
     { when: { merchant: "^RAHUL K$" }, set: { category: "Transfers" } },
     { when: { account: "1234" }, set: { owner: "Wife" } },

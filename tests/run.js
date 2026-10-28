@@ -9,7 +9,7 @@ function load(path) {
 }
 
 const { parseSms, parseDate } = load("lib/parse.js");
-const { money, shiftMonth, totals, categoryTotals, categoryChanges } = load("lib/format.js");
+const { money, shiftMonth, totals, categoryTotals, merchantTotals, recurringPayments } = load("lib/format.js");
 const { compileRules, tagsFor, tagAll, describeRule } = load("lib/tags.js");
 
 let failures = 0;
@@ -256,17 +256,36 @@ eq(
 );
 
 eq(
-  "categoryChanges compares months, biggest change first, ignores untagged",
-  categoryChanges(
-    [{ currency: "INR", amountPaise: -1000, category: "Food" }, { currency: "INR", amountPaise: -500, category: "Shop" }, { currency: "INR", amountPaise: -900 }],
-    [{ currency: "INR", amountPaise: -3000, category: "Food" }, { currency: "INR", amountPaise: -200, category: "Fuel" }]
-  ),
+  "merchantTotals sums INR money out per merchant, most common category, largest first",
+  merchantTotals([
+    { currency: "INR", amountPaise: -500, merchant: "Swiggy", category: "Food" },
+    { currency: "INR", amountPaise: -300, merchant: "Swiggy", category: null },
+    { currency: "INR", amountPaise: -200, merchant: "Swiggy", category: "Food" },
+    { currency: "INR", amountPaise: -1500, bank: "SBI" },
+    { currency: "INR", amountPaise: 900, merchant: "Swiggy" },
+    { currency: "USD", amountPaise: -999, merchant: "OpenAI" },
+  ]),
   [
-    { category: "Food", now: 1000, before: 3000, delta: -2000 },
-    { category: "Shop", now: 500, before: 0, delta: 500 },
-    { category: "Fuel", now: 0, before: 200, delta: -200 },
+    { merchant: "SBI", paise: 1500, count: 1, category: null },
+    { merchant: "Swiggy", paise: 1000, count: 3, category: "Food" },
   ]
 );
+
+const pay = (merchant, date, rupeesOut, category = null) => ({ currency: "INR", amountPaise: -rupeesOut * 100, merchant, date, category });
+const recurring = (list, today = "2026-10-28") => recurringPayments(list, today).map((r) => r.merchant);
+eq(
+  "recurring: monthly, same day and amount, paid this month",
+  recurringPayments([pay("Netflix", "2026-08-03", 649), pay("Netflix", "2026-09-03", 649), pay("Netflix", "2026-10-04", 649, "Subscriptions")], "2026-10-28"),
+  [{ merchant: "Netflix", category: "Subscriptions", paise: 64900, day: 3, months: 3, lastDate: "2026-10-04", paidThisMonth: true, varies: false }]
+);
+eq("recurring: last paid last month is still upcoming", recurringPayments([pay("Airtel", "2026-08-12", 999), pay("Airtel", "2026-09-12", 999)], "2026-10-05")[0].paidThisMonth, false);
+eq("recurring: one month is not enough", recurring([pay("Netflix", "2026-10-03", 649)]), []);
+eq("recurring: frequent merchant is not a bill", recurring([pay("Swiggy", "2026-09-02", 300), pay("Swiggy", "2026-09-09", 320), pay("Swiggy", "2026-10-02", 310), pay("Swiggy", "2026-10-15", 290)]), []);
+eq("recurring: amount changes too much", recurring([pay("Amazon", "2026-09-05", 500), pay("Amazon", "2026-10-05", 1500)]), []);
+eq("recurring: day moves too much", recurring([pay("Uber", "2026-09-02", 200), pay("Uber", "2026-10-20", 200)]), []);
+eq("recurring: stopped two months ago", recurring([pay("Hotstar", "2026-06-10", 299), pay("Hotstar", "2026-07-10", 299), pay("Hotstar", "2026-08-10", 299)]), []);
+eq("recurring: bill that varies a little", recurringPayments([pay("BESCOM", "2026-09-18", 1700), pay("BESCOM", "2026-10-17", 1900)], "2026-10-28")[0].varies, true);
+eq("recurring: sorted by day", recurring([pay("B", "2026-09-20", 10), pay("B", "2026-10-20", 10), pay("A", "2026-09-02", 10), pay("A", "2026-10-02", 10)]), ["A", "B"]);
 
 print(failures ? `[PROGRESS] ${failures}/${count} tests failed` : `[PROGRESS] All ${count} tests passed`);
 if (failures) throw new Error("tests failed");

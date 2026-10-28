@@ -9,14 +9,14 @@
 
 (function () {
   const { compileRules, tagsFor, tagAll, describeRule, patternWords } = FT.tags;
-  const { money, monthLabel, shiftMonth, totals, categoryTotals, categoryChanges } = FT.format;
+  const { money, monthLabel, shiftMonth, totals, categoryTotals, merchantTotals, recurringPayments } = FT.format;
   const app = document.getElementById("app");
 
   const rupees = (n) => money(Math.round(n * 100));
   const ESCAPES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ESCAPES[c]);
   const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const plural = (n, word) => `${n} ${n === 1 ? word : word.endsWith("y") ? word.slice(0, -1) + "ies" : word + "s"}`;
+  const plural = (n, word) => `${n} ${n === 1 ? word : /[^aeiou]y$/.test(word) ? word.slice(0, -1) + "ies" : word + "s"}`;
   const monthName = (ym) => monthLabel(ym).split(" ")[0];
   const FORM_CONDITIONS = ["merchant", "text", "direction", "minAmount", "maxAmount", "account"];
 
@@ -58,6 +58,10 @@
     year: null, // "YYYY" when Spending shows a whole year instead of state.ym
     today: null, // the month FinTrack was opened in
     tab: "spending",
+    trends: "trends", // which view the Trends tab shows: trends | recurring | merchants
+    trendCategory: null,
+    trendMonths: 12,
+    bubble: null, // merchant picked in the Merchants bubbles
     stack: [], // pushed screens: { type: "tx" | "list" | "rule" | "unparsed", ... }
     dialog: null,
     pending: null, // a save waiting for Scriptable's reply
@@ -97,13 +101,6 @@
       <div class="amt ${tx.amountPaise > 0 ? "in" : ""}">${tx.amountPaise > 0 ? "+" : ""}${esc(money(Math.abs(tx.amountPaise), tx.currency))}<small>${day} ${esc(monthName(tx.date.slice(0, 7)))}</small></div></button>`;
   }
 
-  function capsule(cats) {
-    const sum = cats.reduce((s, c) => s + c.paise, 0) || 1;
-    const bar = cats.map((c) => `<div style="flex:${c.paise / sum};background:${colour(c.category)}"></div>`).join("");
-    const legend = cats.slice(0, 6).map((c) => `<span style="--c:${colour(c.category)}">${esc(c.category || "Untagged")} ${esc(money(c.paise))}</span>`).join("");
-    return `<div class="capsule">${bar}</div><div class="legend">${legend}</div>`;
-  }
-
   function ring(cats) {
     const sum = cats.reduce((s, c) => s + c.paise, 0) || 1;
     let offset = 25;
@@ -116,20 +113,14 @@
     return `<svg width="112" height="112" viewBox="0 0 42 42">${circles}</svg>`;
   }
 
-  function compare(a, b, labelA, labelB, c) {
-    const m = Math.max(a, b, 1);
-    return `<div class="cmp"><div><i style="width:${(a / m) * 60}%;background:${c}"></i><b>${esc(money(a))}</b><span class="muted small">${esc(labelA)}</span></div>
-      <div><i style="width:${(b / m) * 60}%;background:var(--fill)"></i>${esc(money(b))}<span class="muted small">${esc(labelB)}</span></div></div>`;
-  }
-
-  // Swipeable month pills grouped by year; Spending also gets an "All YYYY" pill per year.
-  function monthStrip(withYears) {
+  // Swipeable month pills grouped by year, with an "All YYYY" pill per year.
+  function monthStrip() {
     const yms = [...new Set([...Object.keys(state.months).filter(hasMonth), state.today, state.ym])].filter(Boolean).sort();
     const html = [...new Set(yms.map((ym) => ym.slice(0, 4)))]
       .map((y) => `<span class="yearlbl">${y}</span>` +
         yms.filter((ym) => ym.startsWith(y))
-          .map((ym) => `<button class="pill ${ym === state.ym && !(withYears && state.year) ? "on" : ""}" data-act="month" data-ym="${ym}">${esc(monthName(ym))}</button>`).join("") +
-        (withYears ? `<button class="pill year ${state.year === y ? "on" : ""}" data-act="year" data-value="${y}">All ${y}</button>` : ""))
+          .map((ym) => `<button class="pill ${ym === state.ym && !state.year ? "on" : ""}" data-act="month" data-ym="${ym}">${esc(monthName(ym))}</button>`).join("") +
+        `<button class="pill year ${state.year === y ? "on" : ""}" data-act="year" data-value="${y}">All ${y}</button>`)
       .join("");
     return `<div class="strip">${html}</div>`;
   }
@@ -144,7 +135,7 @@
   }
 
   function backNav(title, end = "") {
-    const back = state.stack.length > 1 ? "Back" : { spending: "Spending", insights: "Insights", rules: "Rules" }[state.tab];
+    const back = state.stack.length > 1 ? "Back" : { spending: "Spending", trends: "Trends", rules: "Rules", more: "More" }[state.tab];
     return `<div class="nav"><button data-act="back">‹ ${esc(back)}</button><span class="mid">${esc(title)}</span><span class="end">${end}</span></div>`;
   }
 
@@ -178,7 +169,7 @@
     const cats = categoryTotals(list);
 
     return `<div class="large first">Spending<small>${esc(periodLabel())}</small></div>
-      ${monthStrip(true)}
+      ${monthStrip()}
       <div class="group pad" style="display:flex;align-items:center;gap:16px">${cats.length ? ring(cats) : ""}
         <div style="min-width:0"><div class="muted">Spent in ${esc(state.year || monthName(state.ym))}</div>
           <div class="big">${esc(money(spent))}</div>
@@ -192,6 +183,12 @@
   }
 
   function listView(screen) {
+    if (screen.merchant) {
+      const all = screen.allTime ? tagAll(state.compiled, allTx()).sort((a, b) => (a.date < b.date ? 1 : -1)) : periodTx();
+      const shown = all.filter((t) => (t.merchant || t.bank || "Unknown") === screen.merchant);
+      return `${backNav(screen.merchant)}<div style="height:8px"></div>
+      <div class="group">${shown.map(txRow).join("") || `<div class="empty">Nothing here</div>`}</div>`;
+    }
     const list = periodTx();
     const shown = screen.filter === "all" ? list : screen.filter === "untagged" ? list.filter((t) => !t.category) : list.filter((t) => t.category === screen.filter);
     const title = screen.filter === "all" ? periodLabel() : screen.filter === "untagged" ? "Needs a Category" : screen.filter;
@@ -291,43 +288,137 @@
       ${rows ? `<div class="sf" style="margin-top:-12px">Tap a message to copy it.</div>` : ""}`;
   }
 
-  // ---- Insights (Health style) ----
+  // ---- Trends tab: Trends | Recurring | Merchants ----
 
-  function insightsView() {
-    const list = monthTx(state.ym);
-    const prevYm = shiftMonth(state.ym, -1);
-    const prev = monthTx(prevYm);
-    const t = totals(list).INR || { out: 0, in: 0 };
-    const cards = [];
+  const shortMoney = (paise) => {
+    const r = paise / 100;
+    return r >= 100000 ? `₹${(r / 100000).toFixed(1)}L` : r >= 1000 ? `₹${(r / 1000).toFixed(r >= 10000 ? 0 : 1)}k` : `₹${Math.round(r)}`;
+  };
+  const todayIso = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  };
 
-    cards.push(`<div class="card"><div class="hd">Money in and out</div>${compare(t.in, t.out, "in", "out", "var(--green)")}
-      <div class="muted small" style="margin-top:4px">${t.in >= t.out ? `You kept ${esc(money(t.in - t.out))}${t.in ? ` (${Math.round((100 * (t.in - t.out)) / t.in)}%)` : ""}.` : `You spent ${esc(money(t.out - t.in))} more than came in.`}</div></div>`);
+  function lineChart(values, labels, c, average) {
+    const W = 326, H = 150, n = values.length;
+    const max = Math.max(1, average || 0, ...values) * 1.12;
+    const x = (i) => (n === 1 ? W / 2 : 10 + (i * (W - 20)) / (n - 1));
+    const y = (v) => H - (v / max) * H;
+    const pts = values.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+    let svg = `<svg class="line" viewBox="0 0 ${W} ${H + 22}">
+      <polygon points="${x(0)},${H} ${pts} ${x(n - 1)},${H}" fill="${c}" opacity=".16"/>
+      <polyline points="${pts}" fill="none" stroke="${c}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+      <circle cx="${x(n - 1)}" cy="${y(values[n - 1])}" r="5" fill="${c}" stroke="var(--card)" stroke-width="2"/>`;
+    if (average) svg += `<line x1="0" x2="${W}" y1="${y(average)}" y2="${y(average)}" stroke="var(--sec)" stroke-dasharray="4 4"/>
+      <text x="${W}" y="${y(average) - 6}" text-anchor="end" font-size="11" fill="var(--sec)">avg ${esc(shortMoney(average))}</text>`;
+    labels.forEach((label, i) => {
+      if (n <= 6 || i % 2 === (n - 1) % 2) svg += `<text x="${x(i)}" y="${H + 17}" text-anchor="middle" font-size="11" fill="var(--sec)">${esc(label)}</text>`;
+    });
+    return svg + "</svg>";
+  }
 
-    for (const c of categoryChanges(list, prev).filter((c) => Math.abs(c.delta) >= 10000).slice(0, 4)) {
-      const less = c.delta < 0;
-      const lead = !c.before
-        ? `New this month: <b>${esc(money(c.now))}</b> on ${esc(c.category.toLowerCase())}.`
-        : !c.now
-          ? `Nothing on ${esc(c.category.toLowerCase())} this month, down from ${esc(money(c.before))}.`
-          : `You spent <b>${esc(money(Math.abs(c.delta)))} ${less ? "less" : "more"}</b> on ${esc(c.category.toLowerCase())} than in ${esc(monthName(prevYm))}.`;
-      cards.push(`<div class="card"><div class="hd" style="color:${colour(c.category)}">${look(c.category)[1]} ${esc(c.category)}</div><div class="lead">${lead}</div>
-        ${compare(c.now, c.before, monthName(state.ym), monthName(prevYm), colour(c.category))}</div>`);
+  function trendsView() {
+    const views = [["trends", "Trends"], ["recurring", "Recurring"], ["merchants", "Merchants"]];
+    const seg = `<div class="seg wide">${views.map(([v, label]) => `<button data-act="trends-view" data-value="${v}" class="${state.trends === v ? "on" : ""}">${label}</button>`).join("")}</div>`;
+    const body = { trends: categoryTrend, recurring: recurringList, merchants: merchantBubbles }[state.trends]();
+    return `<div class="large first">${views.find(([v]) => v === state.trends)[1]}</div>${seg}${body}`;
+  }
+
+  // One category's money out per month, last 6 or 12 months up to this month.
+  function categoryTrend() {
+    const n = state.trendMonths;
+    const yms = Array.from({ length: n }, (_, i) => shiftMonth(state.today, i - n + 1));
+    const series = new Map();
+    yms.forEach((ym, i) => {
+      for (const c of categoryTotals(monthTx(ym))) {
+        if (!c.category) continue;
+        if (!series.has(c.category)) series.set(c.category, Array(n).fill(0));
+        series.get(c.category)[i] = c.paise;
+      }
+    });
+    if (!series.size) return `<div class="group"><div class="empty">Tag a few transactions to see how each category moves month to month.</div></div>`;
+    const names = [...series.keys()].sort((a, b) => series.get(b).reduce((s, v) => s + v, 0) - series.get(a).reduce((s, v) => s + v, 0));
+    const cat = series.has(state.trendCategory) ? state.trendCategory : names[0];
+    const values = series.get(cat);
+    const first = Math.max(0, yms.findIndex(hasMonth));
+    const before = values.slice(first, -1);
+    const average = before.length ? before.reduce((s, v) => s + v, 0) / before.length : 0;
+    const now = values[n - 1];
+    const pct = average ? Math.round((100 * (now - average)) / average) : null;
+    const chips = names.map((name) => `<button class="pill ${name === cat ? "on" : ""}" data-act="trend-cat" data-value="${esc(name)}"><i class="dot" style="background:${colour(name)}"></i>${esc(name)}</button>`).join("");
+    const range = [[6, "6M"], [12, "1Y"]].map(([m, label]) => `<button data-act="trend-months" data-value="${m}" class="${n === m ? "on" : ""}">${label}</button>`).join("");
+    const rows = yms.map((ym, i) => [ym, values[i]]).slice(first).reverse()
+      .map(([ym, v]) => `<button class="li plain" data-act="trend-month" data-ym="${ym}" data-value="${esc(cat)}"><div class="main"><div class="t1">${esc(monthLabel(ym))}</div></div><span class="val">${esc(money(v))}</span><span class="chev"></span></button>`).join("");
+    return `<div class="strip">${chips}</div>
+      <div class="group pad"><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+        <div style="min-width:0"><div class="muted">${esc(cat)} in ${esc(monthName(state.today))}</div><div class="big">${esc(money(now))}</div>
+          <div class="small ${pct > 0 ? "up" : "down"}" style="font-weight:600">${pct === null ? "&nbsp;" : `${pct > 0 ? "▲" : pct < 0 ? "▼" : ""} ${Math.abs(pct)}% vs your average`}</div></div>
+        <div class="seg" style="flex:0 0 96px">${range}</div></div>
+        ${lineChart(values.slice(first), yms.slice(first).map(monthName), colour(cat), average)}</div>
+      <div class="sh">Each month</div><div class="group">${rows}</div>`;
+  }
+
+  function recurringList() {
+    const today = todayIso();
+    const day = Number(today.slice(8));
+    const items = recurringPayments(tagAll(state.compiled, allTx()), today);
+    if (!items.length) return `<div class="group"><div class="empty">Nothing repeats yet.</div></div>
+      <div class="sf">A payment shows up here once FinTrack sees it in two months, around the same day and amount.</div>`;
+    const monthly = items.reduce((s, r) => s + r.paise, 0);
+    const mon = monthName(today.slice(0, 7));
+    const row = (r) => {
+      const when = r.paidThisMonth ? `paid ${Number(r.lastDate.slice(8))} ${mon}` : r.day > day ? `in ${plural(r.day - day, "day")}` : r.day === day ? "today" : `due ${r.day} ${mon}`;
+      return `<button class="li" data-act="open-merchant" data-value="${esc(r.merchant)}" data-all="1">${icon(r.category)}
+        <div class="main"><div class="t1">${esc(r.merchant)}</div><div class="t2">Monthly · ${plural(r.months, "month")}${r.varies ? " · varies" : ""}</div></div>
+        <div class="amt">${esc(money(r.paise))}<small>${esc(when)}</small></div></button>`;
+    };
+    const coming = items.filter((r) => !r.paidThisMonth);
+    const paid = items.filter((r) => r.paidThisMonth);
+    return `<div class="group pad"><div class="muted">Every month</div><div class="big">${esc(money(monthly))}</div>
+        <div class="muted small">${plural(items.length, "recurring payment")} · ${esc(money(monthly * 12))} a year</div></div>
+      ${coming.length ? `<div class="sh">Coming up</div><div class="group">${coming.map(row).join("")}</div>` : ""}
+      ${paid.length ? `<div class="sh">Paid this month</div><div class="group">${paid.map(row).join("")}</div>` : ""}
+      <div class="sf">Spotted automatically: the same merchant, a similar amount and around the same day each month.</div>`;
+  }
+
+  // Circles sized by spend, packed outward from the biggest; the viewBox is fitted afterwards.
+  function packBubbles(items) {
+    const max = items[0].paise;
+    const placed = [];
+    for (const m of items) {
+      const r = 24 + 38 * Math.sqrt(m.paise / max);
+      let x = 0, y = 0;
+      for (let t = 0; placed.length; t += 0.12) {
+        x = 2.2 * t * Math.cos(t);
+        y = 1.6 * t * Math.sin(t);
+        if (placed.every((p) => Math.hypot(p.x - x, p.y - y) >= p.r + r + 3)) break;
+      }
+      placed.push({ m, r, x, y });
     }
+    return placed;
+  }
 
-    const owners = new Map();
-    for (const tx of list) if (tx.currency === "INR" && tx.amountPaise < 0) owners.set(tx.owner || null, (owners.get(tx.owner || null) || 0) - tx.amountPaise);
-    if ([...owners.keys()].some(Boolean)) {
-      const byOwner = [...owners].map(([o, paise], i) => ({ category: o || "No owner", paise, i })).sort((a, b) => b.paise - a.paise);
-      cards.push(`<div class="card"><div class="hd">Who spent</div>${capsule(byOwner)}</div>`);
-    }
-
-    const untagged = list.filter((tx) => !tx.category).length;
-    if (untagged) {
-      cards.push(`<button class="card attention" data-act="open-list" data-filter="untagged">${icon(null)}<div style="flex:1"><div style="font-weight:600">${plural(untagged, "transaction")} need a category</div>
-        <div class="muted small">Insights get better as more is tagged.</div></div><span class="chev"></span></button>`);
-    }
-
-    return `<div class="large first">Insights<small>${esc(monthLabel(state.ym))} compared with ${esc(monthLabel(prevYm))}</small></div>${monthStrip(false)}${cards.join("")}`;
+  function merchantBubbles() {
+    const list = merchantTotals(periodTx());
+    if (!list.length) return `${monthStrip()}<div class="group"><div class="empty">No spending in ${esc(periodLabel())}</div></div>`;
+    const picked = list.find((m) => m.merchant === state.bubble) || list[0];
+    const circles = packBubbles(list.slice(0, 14));
+    const x0 = Math.min(...circles.map((c) => c.x - c.r)) - 4, x1 = Math.max(...circles.map((c) => c.x + c.r)) + 4;
+    const y0 = Math.min(...circles.map((c) => c.y - c.r)) - 4, y1 = Math.max(...circles.map((c) => c.y + c.r)) + 4;
+    const svg = circles.map(({ m, r, x, y }) => {
+      const chars = Math.floor((r * 2) / 7.5);
+      const name = m.merchant.length > chars ? m.merchant.slice(0, Math.max(chars - 1, 1)) + "…" : m.merchant;
+      return `<g data-act="bubble" data-value="${esc(m.merchant)}"><circle cx="${x}" cy="${y}" r="${r}" fill="${colour(m.category)}" opacity="${m === picked ? 1 : 0.8}" ${m === picked ? 'stroke="var(--text)" stroke-width="3"' : ""}/>
+        ${r >= 24 ? `<text x="${x}" y="${y + (r >= 34 ? -2 : 4)}" text-anchor="middle" font-size="${r >= 44 ? 13 : 11}" font-weight="700" fill="#fff">${esc(name)}</text>` : ""}
+        ${r >= 34 ? `<text x="${x}" y="${y + 14}" text-anchor="middle" font-size="11" fill="#fff" opacity=".85">${esc(shortMoney(m.paise))}</text>` : ""}</g>`;
+    }).join("");
+    const row = (m) => `<button class="li" data-act="open-merchant" data-value="${esc(m.merchant)}">${icon(m.category)}
+      <div class="main"><div class="t1">${esc(m.merchant)}</div><div class="t2">${plural(m.count, "payment")} · ${esc(money(Math.round(m.paise / m.count / 100) * 100))} each</div></div>
+      <div class="amt">${esc(money(m.paise))}</div><span class="chev"></span></button>`;
+    return `${monthStrip()}
+      <div class="group" style="padding:6px"><svg class="bubbles" viewBox="${x0} ${y0} ${x1 - x0} ${y1 - y0}">${svg}</svg></div>
+      <div class="group">${row(picked)}</div>
+      <div class="sh">All merchants · ${esc(periodLabel())}</div><div class="group">${list.map(row).join("")}</div>`;
   }
 
   // ---- Rules (Shortcuts-style sentences) ----
@@ -561,7 +652,7 @@
 
   const TAB_ICONS = {
     spending: '<svg viewBox="0 0 26 24"><rect x="1" y="4" width="24" height="16" rx="3.5"/><rect x="1" y="8" width="24" height="3" fill="var(--card)"/></svg>',
-    insights: '<svg viewBox="0 0 26 24"><rect x="3" y="12" width="5" height="9" rx="1.5"/><rect x="10.5" y="6" width="5" height="15" rx="1.5"/><rect x="18" y="2" width="5" height="19" rx="1.5"/></svg>',
+    trends: '<svg viewBox="0 0 26 24"><rect x="3" y="12" width="5" height="9" rx="1.5"/><rect x="10.5" y="6" width="5" height="15" rx="1.5"/><rect x="18" y="2" width="5" height="19" rx="1.5"/></svg>',
     rules: '<svg viewBox="0 0 26 24"><rect x="2" y="3" width="22" height="4" rx="2"/><rect x="2" y="10" width="16" height="4" rx="2"/><rect x="2" y="17" width="19" height="4" rx="2"/></svg>',
     more: '<svg viewBox="0 0 26 24"><circle cx="5" cy="12" r="2.6"/><circle cx="13" cy="12" r="2.6"/><circle cx="21" cy="12" r="2.6"/></svg>',
   };
@@ -573,8 +664,8 @@
     }
     const screen = top();
     const views = { tx: txView, list: listView, rule: ruleView, unparsed: unparsedView };
-    const body = screen ? views[screen.type](screen) : { spending: spendingView, insights: insightsView, rules: rulesView, more: moreView }[state.tab]();
-    const tabs = screen ? "" : `<nav class="tabbar">${["spending", "insights", "rules", "more"]
+    const body = screen ? views[screen.type](screen) : { spending: spendingView, trends: trendsView, rules: rulesView, more: moreView }[state.tab]();
+    const tabs = screen ? "" : `<nav class="tabbar">${["spending", "trends", "rules", "more"]
       .map((id) => `<button data-act="tab" data-value="${id}" class="${state.tab === id ? "on" : ""}">${TAB_ICONS[id]}${id[0].toUpperCase() + id.slice(1)}</button>`).join("")}</nav>`;
     app.innerHTML = `<div class="screen ${screen ? "no-tabs" : ""}">${body}</div>${tabs}${dialogView()}`;
     const strip = app.querySelector(".strip");
@@ -596,6 +687,16 @@
     tab: (el) => { state.tab = el.dataset.value; state.stack = []; render(); window.scrollTo(0, 0); },
     month: (el) => { state.ym = el.dataset.ym; state.year = null; render(); },
     year: (el) => { state.year = el.dataset.value; render(); },
+    "trends-view": (el) => { state.trends = el.dataset.value; render(); window.scrollTo(0, 0); },
+    "trend-cat": (el) => { state.trendCategory = el.dataset.value; render(); },
+    "trend-months": (el) => { state.trendMonths = Number(el.dataset.value); render(); },
+    "trend-month": (el) => {
+      state.ym = el.dataset.ym;
+      state.year = null;
+      push({ type: "list", filter: el.dataset.value });
+    },
+    bubble: (el) => { state.bubble = el.dataset.value; render(); },
+    "open-merchant": (el) => push({ type: "list", merchant: el.dataset.value, allTime: el.dataset.all === "1" }),
     back,
     "open-list": (el) => push({ type: "list", filter: el.dataset.filter }),
     "open-tx": (el) => {

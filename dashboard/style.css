@@ -61,16 +61,10 @@ input::placeholder { color: var(--sec); }
 .ic.sq { width: 30px; height: 30px; border-radius: 8px; font-size: 16px; }
 .ic.xl { width: 72px; height: 72px; font-size: 34px; margin: 0 auto 10px; }
 
-.capsule { display: flex; height: 12px; border-radius: 6px; overflow: hidden; gap: 2px; }
-.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 12px; font-size: 13px; }
-.legend span::before { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--c); margin-right: 6px; }
 
 .card { background: var(--card); border-radius: 14px; margin: 0 16px 14px; padding: 14px 16px; }
 .card .hd { display: flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 600; margin-bottom: 6px; }
 .card .lead { font-size: 17px; line-height: 1.35; }
-.cmp { margin-top: 10px; font-size: 13px; }
-.cmp div { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
-.cmp i { display: block; height: 18px; border-radius: 5px; min-width: 3px; }
 .attention { display: flex; align-items: center; gap: 12px; width: calc(100% - 32px); }
 
 .seg { display: flex; background: var(--fill); border-radius: 9px; padding: 2px; flex: 0 0 200px; }
@@ -120,3 +114,11 @@ input::placeholder { color: var(--sec); }
 .bars .b { width: 100%; border-radius: 5px; background: var(--blue); }
 .bars button[disabled] .b { background: var(--fill); }
 .bars .l { font-size: 11px; color: var(--sec); }
+
+/* Trends tab */
+.seg.wide { margin: 0 16px 16px; }
+.seg.wide button { font-size: 14px; padding: 7px 0; }
+.pill .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 7px; }
+.up { color: var(--red); } .down { color: var(--green); }
+svg.line { display: block; width: 100%; margin-top: 12px; }
+svg.bubbles { display: block; width: 100%; max-height: 360px; }
