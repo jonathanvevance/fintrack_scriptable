@@ -56,7 +56,7 @@
     version: "",
     ym: null,
     tab: "spending",
-    stack: [], // pushed screens: { type: "tx" | "list" | "categories" | "rule", ... }
+    stack: [], // pushed screens: { type: "tx" | "list" | "rule" | "unparsed", ... }
     dialog: null,
     pending: null, // a save waiting for Scriptable's reply
     pendingAction: null, // options for any other request waiting for a reply
@@ -97,28 +97,6 @@
     return `<div class="capsule">${bar}</div><div class="legend">${legend}</div>`;
   }
 
-  // Money out per week of the month (1–7, 8–14, ...), stacked by category.
-  function weekBars(list) {
-    const weeks = [[], [], [], [], []];
-    for (const tx of list) if (tx.currency === "INR" && tx.amountPaise < 0) weeks[Math.min(4, Math.floor((Number(tx.date.slice(8)) - 1) / 7))].push(tx);
-    const sums = weeks.map((w) => categoryTotals(w));
-    const max = Math.max(1, ...sums.map((s) => s.reduce((a, c) => a + c.paise, 0)));
-    const W = 320, H = 110, bw = 40, gap = (W - bw * 5) / 5;
-    let svg = `<svg class="chart" viewBox="0 0 ${W} ${H + 18}">`;
-    sums.forEach((cats, i) => {
-      const x = gap / 2 + i * (bw + gap);
-      let y = H;
-      for (const c of cats.slice().reverse()) {
-        const h = (c.paise / max) * H;
-        y -= h;
-        if (h > 1.5) svg += `<rect x="${x}" y="${y}" width="${bw}" height="${h - 1.5}" rx="4" fill="${colour(c.category)}"/>`;
-      }
-      if (!cats.length) svg += `<rect x="${x}" y="${H - 3}" width="${bw}" height="3" rx="1.5" fill="var(--fill)"/>`;
-      svg += `<text x="${x + bw / 2}" y="${H + 14}" font-size="11" text-anchor="middle" fill="var(--sec)">${i * 7 + 1}–${i === 4 ? "31" : i * 7 + 7}</text>`;
-    });
-    return svg + "</svg>";
-  }
-
   function ring(cats) {
     const sum = cats.reduce((s, c) => s + c.paise, 0) || 1;
     let offset = 25;
@@ -149,6 +127,16 @@
 
   // ---- Spending (Wallet style) ----
 
+  function categoryRows(list) {
+    const counts = new Map();
+    for (const tx of list) if (tx.currency === "INR" && tx.amountPaise < 0) counts.set(tx.category || null, (counts.get(tx.category || null) || 0) + 1);
+    return categoryTotals(list)
+      .map((c) => `<button class="li" data-act="open-list" data-filter="${esc(c.category || "untagged")}">${icon(c.category)}
+        <div class="main"><div class="t1">${esc(c.category || "Untagged")}</div><div class="t2">${plural(counts.get(c.category) || 0, "transaction")}</div></div>
+        <div class="amt">${esc(money(c.paise))}</div><span class="chev"></span></button>`)
+      .join("");
+  }
+
   function spendingView() {
     const list = monthTx(state.ym);
     const prev = monthTx(shiftMonth(state.ym, -1));
@@ -163,15 +151,13 @@
 
     return `${monthNav()}
       <div class="large">Spending<small>${esc(monthLabel(state.ym))}</small></div>
-      <div class="group pad">
-        <div class="muted">Spent in ${esc(monthName(state.ym))}</div>
-        <div class="big">${esc(money(spent))}</div>
-        <div class="muted small">${esc([vs, foreign.length ? "also " + foreign.join(", ") : ""].filter(Boolean).join(" · ") || "\u00a0")}</div>
-        ${weekBars(list)}
-      </div>
+      <div class="group pad" style="display:flex;align-items:center;gap:16px">${cats.length ? ring(cats) : ""}
+        <div style="min-width:0"><div class="muted">Spent in ${esc(monthName(state.ym))}</div>
+          <div class="big">${esc(money(spent))}</div>
+          <div class="muted small">${esc([vs, foreign.length ? "also " + foreign.join(", ") : ""].filter(Boolean).join(" · ") || "\u00a0")}</div></div></div>
+      ${cats.length ? `<div class="sh">Categories</div><div class="group">${categoryRows(list)}</div>` : ""}
       ${untagged ? `<button class="card attention" data-act="open-list" data-filter="untagged">${icon(null)}<div style="flex:1"><div style="font-weight:600">${plural(untagged, "transaction")} need a category</div>
         <div class="muted small">Tag one and choose Always; FinTrack remembers.</div></div><span class="chev"></span></button>` : ""}
-      ${cats.length ? `<div class="sh2">Categories <button data-act="open-categories">See All</button></div><div class="group pad">${capsule(cats)}</div>` : ""}
       <div class="sh2">Latest ${list.length > 5 ? `<button data-act="open-list" data-filter="all">See All</button>` : ""}</div>
       <div class="group">${list.slice(0, 5).map(txRow).join("") || `<div class="empty">No transactions in ${esc(monthLabel(state.ym))}</div>`}</div>`;
   }
@@ -182,23 +168,6 @@
     const title = screen.filter === "all" ? monthLabel(state.ym) : screen.filter === "untagged" ? "Needs a Category" : screen.filter;
     return `${backNav(title)}<div style="height:8px"></div>
       <div class="group">${shown.map(txRow).join("") || `<div class="empty">Nothing here</div>`}</div>`;
-  }
-
-  function categoriesView() {
-    const list = monthTx(state.ym);
-    const cats = categoryTotals(list);
-    const spent = cats.reduce((s, c) => s + c.paise, 0);
-    const counts = new Map();
-    for (const tx of list) if (tx.amountPaise < 0) counts.set(tx.category || null, (counts.get(tx.category || null) || 0) + 1);
-    const rows = cats
-      .map((c) => `<button class="li" data-act="open-list" data-filter="${esc(c.category || "untagged")}">${icon(c.category)}
-        <div class="main"><div class="t1">${esc(c.category || "Untagged")}</div><div class="t2">${plural(counts.get(c.category) || 0, "transaction")}</div></div>
-        <div class="amt">${esc(money(c.paise))}</div><span class="chev"></span></button>`)
-      .join("");
-    return `${backNav("Categories")}<div style="height:8px"></div>
-      <div class="group pad" style="display:flex;align-items:center;gap:16px">${ring(cats)}
-        <div><div class="muted small">Spent in ${esc(monthName(state.ym))}</div><div class="big" style="font-size:26px">${esc(money(spent))}</div><div class="muted small">${plural(cats.length, "category")}</div></div></div>
-      <div class="group">${rows}</div>`;
   }
 
   // ---- Transaction detail: pick a category, optionally Always ----
@@ -571,7 +540,7 @@
       return;
     }
     const screen = top();
-    const views = { tx: txView, list: listView, categories: categoriesView, rule: ruleView, unparsed: unparsedView };
+    const views = { tx: txView, list: listView, rule: ruleView, unparsed: unparsedView };
     const body = screen ? views[screen.type](screen) : { spending: spendingView, insights: insightsView, rules: rulesView, more: moreView }[state.tab]();
     const tabs = screen ? "" : `<nav class="tabbar">${["spending", "insights", "rules", "more"]
       .map((id) => `<button data-act="tab" data-value="${id}" class="${state.tab === id ? "on" : ""}">${TAB_ICONS[id]}${id[0].toUpperCase() + id.slice(1)}</button>`).join("")}</nav>`;
@@ -594,7 +563,6 @@
     next: () => { state.ym = shiftMonth(state.ym, 1); render(); },
     back,
     "open-list": (el) => push({ type: "list", filter: el.dataset.filter }),
-    "open-categories": () => push({ type: "categories" }),
     "open-tx": (el) => {
       const tx = tagAll(state.compiled, [findTx(el.dataset.ym, el.dataset.id)])[0];
       push({ type: "tx", ym: el.dataset.ym, id: tx.id, draft: tx.category, always: false });
