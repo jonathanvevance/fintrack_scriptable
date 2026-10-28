@@ -290,12 +290,12 @@ eq("unknown condition is rejected", compileError([{ when: { merchnat: "x" } }]),
 eq("bad direction is rejected", compileError([{}, { when: { direction: "both" } }]), 'rules.json rule 2: direction must be "in" or "out", got both');
 
 const rupees = (n) => money(n * 100);
-eq("describe merchant pattern", describeRule({ when: { direction: "out", merchant: "swiggy|zomato" }, set: { category: "Food" } }, rupees), 'Paid to a name containing "swiggy" or "zomato" → Food');
-eq("describe exact merchant from Always tag", describeRule({ when: { merchant: "^AMAZON\\.IN$" }, set: { category: "Shopping" } }, rupees), 'Paid to or received from "AMAZON.IN" → Shopping');
-eq("describe text and account", describeRule({ when: { text: "cashback", account: "1234" }, set: { category: "Cashback" } }, rupees), 'SMS mentions "cashback", account ··1234 → Cashback');
-eq("describe amount range", describeRule({ when: { minAmount: 100, maxAmount: 10000 }, set: { category: "Mid" } }, rupees), "₹100 to ₹10,000 → Mid");
-eq("describe minimum only", describeRule({ when: { direction: "out", minAmount: 10000 }, set: { category: "Large" } }, rupees), "Paid, ₹10,000 or more → Large");
-eq("describe old owner/tags rule", describeRule({ when: { account: "1234" }, set: { owner: "Wife" } }, rupees), "Account ··1234 → nothing");
+eq("describe merchant pattern", describeRule({ when: { direction: "out", merchant: "swiggy|zomato" }, set: { category: "Food" } }, rupees), 'When I pay "swiggy" or "zomato", it\'s Food');
+eq("describe exact merchant from Always tag", describeRule({ when: { merchant: "^AMAZON\\.IN$" }, set: { category: "Shopping" } }, rupees), 'When I pay or get money from exactly "AMAZON.IN", it\'s Shopping');
+eq("describe text and account", describeRule({ when: { text: "cashback", account: "1234" }, set: { category: "Cashback" } }, rupees), 'When I pay or get money on account ··1234 and the SMS says "cashback", it\'s Cashback');
+eq("describe amount range", describeRule({ when: { minAmount: 100, maxAmount: 10000 }, set: { category: "Mid" } }, rupees), "When I pay or get money between ₹100 and ₹10,000, it's Mid");
+eq("describe minimum only", describeRule({ when: { direction: "out", minAmount: 10000 }, set: { category: "Large" } }, rupees), "When I pay at least ₹10,000, it's Large");
+eq("describe old owner/tags rule", describeRule({ when: { account: "1234" }, set: { owner: "Wife" } }, rupees), "When I pay or get money on account ··1234, it's nothing");
 
 eq("plain: exact names", isPlainPattern("^Jio Prepaid Rech$|^AIRTEL$"), true);
 eq("plain: partial names", isPlainPattern("swiggy|zomato"), true);
@@ -307,8 +307,9 @@ eq("recipientPattern exact escapes", recipientPattern(["AMAZON.IN", "Jio (Prepai
 eq("recipientPattern partial", recipientPattern(["swiggy", "zomato"], false), "swiggy|zomato");
 eq("recipientPattern round trip", patternWords(recipientPattern(["A.B", "C+D"], true)), { exact: true, words: ["A.B", "C+D"] });
 eq("recipientPattern matches literally", new RegExp(recipientPattern(["A.B"], true), "i").test("AXB"), false);
-eq("describe money in from a name", describeRule({ when: { direction: "in", merchant: "^SBI Card Cashback$" }, set: { category: "Cashback" } }, rupees), 'Received from "SBI Card Cashback" → Cashback');
-eq("describe empty rule", describeRule({}), "Every transaction → nothing");
+eq("describe money in from a name", describeRule({ when: { direction: "in", merchant: "^SBI Card Cashback$" }, set: { category: "Cashback" } }, rupees), 'When I receive money from exactly "SBI Card Cashback", it\'s Cashback');
+eq("describe empty rule", describeRule({}), "When I pay or get money, it's nothing");
+eq("describe three names and an amount cap", describeRule({ when: { direction: "out", merchant: "airtel|bescom|rent", maxAmount: 500 }, set: { category: "Bills" } }, rupees), 'When I pay "airtel", "bescom" or "rent" up to ₹500, it\'s Bills');
 
 eq(
   "categoryTotals sums INR money out, largest first, untagged as null",

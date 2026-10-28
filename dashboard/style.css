@@ -123,10 +123,7 @@ input::placeholder { color: var(--sec); }
 svg.line { display: block; width: 100%; margin-top: 12px; }
 svg.bubbles { display: block; width: 100%; max-height: 360px; }
 
-/* Rule editor name chips and the category icon picker */
-.namechips { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 16px 6px; }
-.namechip { display: inline-flex; align-items: center; gap: 4px; font-size: 15px; padding: 5px 6px 5px 12px; border-radius: 16px; background: var(--fill); }
-.namechip button { width: 22px; height: 22px; border-radius: 11px; text-align: center; color: var(--sec); font-size: 17px; line-height: 22px; }
+/* Category icon picker */
 .emojis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
 .emojis button { height: 44px; border-radius: 12px; font-size: 24px; text-align: center; background: var(--fill); }
 .swatches { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
@@ -136,3 +133,12 @@ svg.bubbles { display: block; width: 100%; max-height: 360px; }
 .chev.open { transform: rotate(90deg); }
 .received { display: flex; align-items: center; gap: 4px; margin-top: 6px; font-size: 15px; color: var(--sec); }
 .received b { font-weight: 600; }
+
+/* Rule editor: the sentence, and the sheet a part of it opens */
+.rule-sentence { font-size: 21px; line-height: 2; padding: 12px 16px; }
+.tok.edit { font: inherit; font-weight: 600; background: none; box-shadow: inset 0 0 0 1.5px var(--c); color: var(--c); padding: 1px 9px; line-height: 1.6; }
+.tok.edit::after { content: " ▾"; font-size: 11px; }
+.sheet-dim { position: fixed; inset: 0; background: rgba(0, 0, 0, .3); z-index: 20; }
+.sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 21; max-height: 78vh; overflow-y: auto; background: var(--bg); border-radius: 14px 14px 0 0; padding: 6px 0 calc(24px + env(safe-area-inset-bottom)); box-shadow: 0 -10px 40px rgba(0, 0, 0, .25); }
+.sheet .grab { width: 36px; height: 5px; border-radius: 3px; background: var(--chev); margin: 0 auto 2px; }
+.sheet .nav { position: static; background: none; -webkit-backdrop-filter: none; backdrop-filter: none; }

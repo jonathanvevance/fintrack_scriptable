@@ -9,7 +9,7 @@
 // Needs FT.tags (lib/tags.js), FT.format (lib/format.js) and FT.accounts (lib/accounts.js) loaded first.
 
 (function () {
-  const { compileRules, tagsFor, tagAll, describeRule, patternWords, isPlainPattern, recipientPattern } = FT.tags;
+  const { compileRules, tagsFor, tagAll, describeRule, ruleSentence, orList, patternWords, isPlainPattern, recipientPattern } = FT.tags;
   const { money, monthLabel, shiftMonth, totals, categoryTotals, merchantTotals, recurringPayments } = FT.format;
   const { checkAccounts, compileAccounts, accountLabel } = FT.accounts;
   const app = document.getElementById("app");
@@ -771,36 +771,26 @@
     return `<span class="tok" style="--c:${c}">${esc(text)}</span>`;
   }
 
-  function sentence(rule) {
-    const when = rule.when || {};
-    const set = rule.set || {};
-    const accent = colour(set.category);
-    const parts = [];
-    const paid = { out: "paid", in: "received" }[when.direction];
-    const paidToken = paid ? token(paid, when.direction === "in" ? "var(--green)" : "var(--red)") : "";
-    if (when.merchant != null) {
-      const { exact, words } = patternWords(when.merchant);
-      const lead = paid ? `${paidToken} ${when.direction === "out" ? "to" : "from"}` : "paid to or received from";
-      parts.push(`${lead} ${exact ? "" : "a name containing "}${words.map((w) => token(w, accent)).join(" or ")}`);
-    } else if (paid) {
-      parts.push(paidToken);
-    }
-    for (const [key, label] of [["text", "the SMS"], ["bank", "bank"], ["template", "template"]]) {
-      if (when[key] == null) continue;
-      const { exact, words } = patternWords(when[key]);
-      const verb = exact ? "is" : key === "text" ? "mentions" : "contains";
-      parts.push(`${label} ${verb} ${words.map((w) => token(w, accent)).join(" or ")}`);
-    }
-    if (when.account != null) parts.push(`account is ${token("··" + when.account, "#8e8e93")}`);
-    if (when.currency) parts.push(`currency is ${token(when.currency, "#8e8e93")}`);
-    if (when.minAmount != null || when.maxAmount != null) {
-      const range = when.minAmount != null && when.maxAmount != null ? `${rupees(when.minAmount)}–${rupees(when.maxAmount)}`
-        : when.minAmount != null ? `${rupees(when.minAmount)} or more` : `up to ${rupees(when.maxAmount)}`;
-      parts.push(`amount is ${token(range, "#8e8e93")}`);
-    }
-    const then = set.category ? `it's ${token(`${look(set.category)[1]} ${set.category}`, accent)}`
-      : `<span class="muted">nothing: owner and tags are no longer used, so this rule can go</span>`;
-    return `When ${parts.join(" and ") || "anything"}<br>then ${then}`;
+  // The rule's sentence as HTML (see ruleSentence). `edit(kind)` returns a data-act for the parts
+  // that open a sheet in the editor, or nothing for the plain Rules list.
+  function sentence(rule, edit = () => "") {
+    const category = (rule.set || {}).category;
+    const accent = category ? colour(category) : "var(--blue)";
+    const DIR = { out: "var(--red)", in: "var(--green)" };
+    const tok = (text, c, kind) => {
+      const act = edit(kind);
+      return act ? `<button class="tok edit" style="--c:${c}" data-act="${act}" data-value="${kind}">${esc(text)}</button>` : token(text, c);
+    };
+    return ruleSentence(rule, rupees).map((p) => {
+      if (typeof p === "string") return esc(p);
+      if (p.words) return orList(p.words.map((w) => tok(w, p.kind === "other" ? "#8e8e93" : accent, p.kind)));
+      if (p.kind === "dir") return DIR[(rule.when || {}).direction] || edit("dir") ? tok(p.text, DIR[(rule.when || {}).direction] || "var(--blue)", "dir") : esc(p.text);
+      if (p.kind === "category") {
+        if (category) return tok(`${look(category)[1]} ${category}`, accent, "category");
+        return edit("category") ? tok("pick a category", "var(--blue)", "category") : `<span class="muted">nothing: owner and tags are no longer used, so this rule can go</span>`;
+      }
+      return tok(p.text, "#8e8e93", p.kind);
+    }).join("");
   }
 
   function ruleCard(rule, i, txs) {
@@ -901,9 +891,9 @@
       <div class="group">${rows}</div>`;
   }
 
-  // ---- Rule editor (grouped form) ----
+  // ---- Rule editor: the rule's sentence, each part opening a sheet ----
 
-  // Plain-name patterns become "is" / "contains" plus name chips; anything else is kept as is.
+  // Plain-name patterns become "part of" / "exactly" plus a list of names; anything else is kept as is.
   function fieldsFromRule(rule) {
     const when = rule.when || {};
     const extra = {};
@@ -920,7 +910,7 @@
     }
     return {
       extra,
-      more: words.length > 0 || when.account != null,
+      sheet: null,
       fields: {
         recipients, exact, recipientInput: "", words, wordInput: "", direction: when.direction || "",
         minAmount: when.minAmount != null ? String(when.minAmount) : "", maxAmount: when.maxAmount != null ? String(when.maxAmount) : "",
@@ -932,8 +922,9 @@
   // Names typed but not yet added with Add still count.
   const withTyped = (list, typed) => (typed.trim() ? [...list, typed.trim()] : list);
 
-  // Throws a readable message when a field is invalid.
-  function ruleFromForm(screen) {
+  // The rule as the editor stands. With `strict`, throws a readable message when a field is invalid;
+  // without it, an amount that isn't a number yet is left out (for drawing the sentence while typing).
+  function ruleFromForm(screen, strict = true) {
     const f = screen.fields;
     const when = { ...screen.extra };
     const recipients = withTyped(f.recipients, f.recipientInput);
@@ -945,11 +936,11 @@
     for (const key of ["minAmount", "maxAmount"]) {
       if (!f[key].trim()) continue;
       const n = Number(f[key].replace(/,/g, ""));
-      if (!Number.isFinite(n) || n < 0) throw new Error(`${key === "minAmount" ? "Minimum" : "Maximum"} amount must be a number`);
-      when[key] = n;
+      if (Number.isFinite(n) && n >= 0) when[key] = n;
+      else if (strict) throw new Error(`${key === "minAmount" ? "Lowest" : "Highest"} amount must be a number`);
     }
     const rule = { when, set: f.category ? { category: f.category } : {} };
-    compileRules([rule]);
+    if (strict) compileRules([rule]);
     return rule;
   }
 
@@ -968,49 +959,71 @@
     return `<div class="sh">Matches ${plural(hits.length, "transaction")}</div><div class="group">${hits.slice(0, 5).map(txRow).join("")}${more}</div>`;
   }
 
-  function field(screen, name, label, placeholder) {
-    return `<div class="li plain"><span>${label}</span><input data-field="${name}" value="${esc(screen.fields[name])}" placeholder="${esc(placeholder)}" autocapitalize="off" autocorrect="off"></div>`;
+  // The parts the sheet edits: what each "Add to the sentence" row says, and whether the rule has it.
+  const RULE_PARTS = [
+    ["names", (f) => ({ out: "Name you pay", in: "Name you get money from" }[f.direction] || "Name you pay or get money from"), (f) => f.recipients.length > 0],
+    ["amount", () => "Amount", (f) => Boolean(f.minAmount.trim() || f.maxAmount.trim())],
+    ["account", () => "Account", (f) => Boolean(f.account.trim())],
+    ["words", () => "Word the SMS says", (f) => f.words.length > 0],
+  ];
+
+  // Rows with Remove for a list field ("recipients" or "words"), then an input with Add.
+  function wordRows(screen, list, input, placeholder) {
+    const rows = screen.fields[list].map((w, i) => `<div class="li plain"><div class="main"><div class="t1">${esc(w)}</div></div>
+      <button class="danger" data-act="remove-word" data-list="${list}" data-i="${i}">Remove</button></div>`).join("");
+    return `${rows}<div class="li plain"><input class="left" data-field="${input}" value="${esc(screen.fields[input])}" placeholder="${esc(placeholder)}" autocapitalize="off" autocorrect="off">
+      <button class="link" data-act="add-word" data-list="${list}">Add</button></div>`;
   }
 
-  // Removable name chips plus an input with Add, for a list field ("recipients" or "words").
-  function nameList(screen, list, input, placeholder) {
-    const names = screen.fields[list];
-    const chips = names.map((w, i) => `<span class="namechip">${esc(w)}<button data-act="remove-word" data-list="${list}" data-i="${i}">×</button></span>`).join("");
-    return `${chips ? `<div class="namechips">${chips}</div>` : ""}
-      <div class="li plain"><input class="left" data-field="${input}" value="${esc(screen.fields[input])}" placeholder="${esc(names.length ? "Add another" : placeholder)}" autocapitalize="off" autocorrect="off">
-        <button class="link" data-act="add-word" data-list="${list}">Add</button></div>`;
+  const removePart = (kind) => `<div class="group"><button class="li plain" data-act="clear-part" data-value="${kind}"><span class="danger">Remove from Sentence</span></button></div>`;
+
+  function ruleSheet(screen) {
+    const f = screen.fields;
+    const tick = (on) => (on ? `<span class="link">✓</span>` : "");
+    const amountRow = (key, label, placeholder) => `<div class="li plain"><span>${label}</span><input data-field="${key}" value="${esc(f[key])}" placeholder="${placeholder}" inputmode="decimal"></div>`;
+    const body = {
+      dir: () => `<div class="sh">When I …</div><div class="group">${[["out", "pay", "money goes out"], ["in", "receive money", "money comes in"], ["", "pay or get money", "either way"]]
+        .map(([v, label, note]) => `<button class="li plain" data-act="dir" data-value="${v}"><div class="main"><div class="t1">${label}</div><div class="t2">${note}</div></div>${tick(f.direction === v)}</button>`).join("")}</div>`,
+      names: () => `<div class="sh">Names</div><div class="group">${wordRows(screen, "recipients", "recipientInput", "Name, e.g. Swiggy")}</div>
+        <div class="sh">A name matches</div><div class="group">
+          <button class="li plain" data-act="match-mode" data-value="contains"><div class="main"><div class="t1">Part of the name</div><div class="t2">swiggy matches SWIGGY BANGALORE</div></div>${tick(!f.exact)}</button>
+          <button class="li plain" data-act="match-mode" data-value="is"><div class="main"><div class="t1">Exactly</div><div class="t2">the whole name, as the SMS gives it</div></div>${tick(f.exact)}</button></div>
+        <div class="sf">Capital letters don't matter.</div>${f.recipients.length ? removePart("names") : ""}`,
+      words: () => `<div class="sh">The SMS says</div><div class="group">${wordRows(screen, "words", "wordInput", "Word, e.g. cashback")}</div>
+        <div class="sf">Any of these anywhere in the message. Capital letters don't matter.</div>${f.words.length ? removePart("words") : ""}`,
+      amount: () => `<div class="sh">Amount in ₹</div><div class="group">${amountRow("minAmount", "At least", "any")}${amountRow("maxAmount", "Up to", "any")}</div>
+        <div class="sf">Leave one empty for no limit that way.</div>${f.minAmount.trim() || f.maxAmount.trim() ? removePart("amount") : ""}`,
+      account: () => `<div class="sh">Account</div><div class="group"><div class="li plain"><span>Last digits</span><input data-field="account" value="${esc(f.account)}" placeholder="1234" inputmode="numeric"></div></div>
+        <div class="sf">The account or card digits the SMS shows.</div>${f.account.trim() ? removePart("account") : ""}`,
+      category: () => {
+        const choices = knownCategories();
+        if (f.category && !choices.includes(f.category)) choices.unshift(f.category);
+        return `<div class="sh">It's</div><div class="group">${choices.map((name) => `<button class="li" data-act="rule-cat" data-value="${esc(name)}">${icon(name)}<div class="main"><div class="t1">${esc(name)}</div></div>${tick(f.category === name)}</button>`).join("")}
+          <button class="li plain" data-act="new-category"><span class="link">New Category…</span></button></div>`;
+      },
+    }[screen.sheet];
+    return `<div class="sheet-dim" data-act="close-sheet"></div><div class="sheet"><div class="grab"></div>
+      <div class="nav"><span></span><span class="mid"></span><button class="end" data-act="close-sheet"><b>Done</b></button></div>${body()}</div>`;
   }
 
   function ruleView(screen) {
     const f = screen.fields;
-    const segOf = (act, options, current) => options.map(([v, label]) => `<button data-act="${act}" data-value="${v}" class="${current === v ? "on" : ""}">${label}</button>`).join("");
-    const choices = knownCategories().slice(0, 12);
-    if (f.category && !choices.includes(f.category)) choices.unshift(f.category);
-    const cats = choices.map((name) => `<button data-act="rule-cat" data-value="${esc(name)}" class="${f.category === name ? "on" : ""}">${look(name)[1]} ${esc(name)}</button>`).join("");
-    const extra = Object.keys(screen.extra).length ? `<div class="sf" style="margin-top:-12px">Also keeps: ${esc(describeRule({ when: screen.extra }, rupees).replace(/ → .*$/, ""))}</div>` : "";
+    const editable = { dir: true, names: Boolean(f.recipients.length || f.recipientInput.trim()), words: Boolean(f.words.length || f.wordInput.trim()), amount: true, account: true, category: true };
+    const rule = ruleFromForm(screen, false);
+    const adds = RULE_PARTS.filter(([kind, , has]) => !has(f) && !(kind === "names" && screen.extra.merchant) && !(kind === "words" && screen.extra.text))
+      .map(([kind, label]) => `<button class="li plain" data-act="open-sheet" data-value="${kind}"><span class="link">+ ${esc(label(f))}</span></button>`).join("");
     const editing = screen.index != null;
     return `<div class="nav"><button data-act="back">Cancel</button><span class="mid">${editing ? "Edit Rule" : "New Rule"}</span><button class="end" data-act="save-rule"><b>Save</b></button></div>
       <div style="height:8px"></div>
-      <div class="sh">When</div>
-      <div class="group">
-        <div class="li plain"><span style="flex:1">Money</span><div class="seg">${segOf("dir", [["out", "Paid"], ["in", "Received"], ["", "Either"]], f.direction)}</div></div>
-        <div class="li plain"><span style="flex:1">${{ out: "Paid to", in: "Received from" }[f.direction] || "To or from"}</span><div class="seg">${segOf("match-mode", [["contains", "contains"], ["is", "is"]], f.exact ? "is" : "contains")}</div></div>
-        ${nameList(screen, "recipients", "recipientInput", "Name, e.g. Swiggy")}
-        <div class="li plain"><span>Amount ₹</span><input data-field="minAmount" value="${esc(f.minAmount)}" placeholder="from" inputmode="decimal"><span class="muted">to</span><input data-field="maxAmount" value="${esc(f.maxAmount)}" placeholder="any" inputmode="decimal" style="flex:0 0 72px"></div>
-        <button class="li plain" data-act="toggle-more"><span class="link" style="flex:1">${screen.more ? "Fewer conditions" : "More conditions"}</span></button>
-        ${screen.more ? `<div class="li plain"><span class="muted small" style="flex:1">SMS mentions</span></div>${nameList(screen, "words", "wordInput", "Word, e.g. cashback")}${field(screen, "account", "Account", "last digits")}` : ""}
-      </div>
-      <div class="sf">${f.exact ? "<b>is</b>: the whole name must match" : "<b>contains</b>: part of the name is enough, like swiggy in SWIGGY BANGALORE"}. Capital letters don't matter.</div>${extra}
-      <div class="sh">Then set category</div>
-      <div class="group">
-        <div class="chips" style="padding-top:12px">${cats}</div>
-        <button class="li plain" data-act="new-category"><span class="link">New Category…</span></button>
-      </div>
+      <div class="group rule-sentence">${sentence(rule, (kind) => (editable[kind] ? "open-sheet" : ""))}</div>
+      <div class="sf">Tap an outlined word to change it.</div>
+      ${adds ? `<div class="sh">Add to the sentence</div><div class="group">${adds}</div>` : ""}
       <div id="preview">${previewHtml(screen)}</div>
       ${editing ? `<div class="group">
         ${screen.index > 0 ? `<button class="li plain" data-act="move-rule" data-value="-1"><span class="link">Move Up</span></button>` : ""}
         ${screen.index < state.rules.length - 1 ? `<button class="li plain" data-act="move-rule" data-value="1"><span class="link">Move Down</span></button>` : ""}
-        <button class="li plain" data-act="delete-rule"><span class="danger">Delete Rule</span></button></div>` : ""}`;
+        <button class="li plain" data-act="delete-rule"><span class="danger">Delete Rule</span></button></div>` : ""}
+      ${screen.sheet ? ruleSheet(screen) : ""}`;
   }
 
   function saveRule(screen) {
@@ -1210,7 +1223,10 @@
     "pick-colour": (el) => { top().newLook.colour = el.dataset.value; top().lookTouched = true; render(); },
     "open-categories": () => push({ type: "categories" }),
     "open-category": (el) => push({ type: "category", name: el.dataset.value, nameInput: el.dataset.value, newLook: null, showLook: false }),
-    "new-category": () => push({ type: "category", name: null, nameInput: "", newLook: { name: "", emoji: "🏷️", colour: "#8e8e93" }, showLook: true, lookTouched: false }),
+    "new-category": () => {
+      if (top() && top().type === "rule") top().sheet = null;
+      push({ type: "category", name: null, nameInput: "", newLook: { name: "", emoji: "🏷️", colour: "#8e8e93" }, showLook: true, lookTouched: false });
+    },
     "toggle-look": () => {
       const s = top();
       s.showLook = !s.showLook;
@@ -1252,10 +1268,23 @@
     "save-tx": () => saveTx(top()),
     "new-rule": (el) => push({ type: "rule", index: null, ...fieldsFromRule(el.dataset.category ? { set: { category: el.dataset.category } } : {}) }),
     "edit-rule": (el) => { const i = Number(el.dataset.i); push({ type: "rule", index: i, ...fieldsFromRule(state.rules[i]) }); },
-    dir: (el) => { top().fields.direction = el.dataset.value; render(); },
-    "rule-cat": (el) => { top().fields.category = el.dataset.value; render(); },
+    dir: (el) => { top().fields.direction = el.dataset.value; top().sheet = null; render(); },
+    "rule-cat": (el) => { top().fields.category = el.dataset.value; top().sheet = null; render(); },
     "match-mode": (el) => { top().fields.exact = el.dataset.value === "is"; render(); },
-    "toggle-more": () => { top().more = !top().more; render(); },
+    "open-sheet": (el) => {
+      top().sheet = el.dataset.value;
+      render();
+      const box = app.querySelector(".sheet input");
+      if (box && !box.value && el.dataset.value !== "names" && el.dataset.value !== "words") box.focus();
+    },
+    "close-sheet": () => { top().sheet = null; render(); },
+    "clear-part": (el) => {
+      const f = top().fields;
+      ({ names: () => { f.recipients = []; f.recipientInput = ""; }, words: () => { f.words = []; f.wordInput = ""; },
+        amount: () => { f.minAmount = ""; f.maxAmount = ""; }, account: () => { f.account = ""; } })[el.dataset.value]();
+      top().sheet = null;
+      render();
+    },
     "add-word": (el) => {
       const f = top().fields;
       const list = el.dataset.list;
