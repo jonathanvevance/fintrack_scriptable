@@ -175,15 +175,20 @@ Decisions:
 
 Already covered: HSBC UPI payment (`hsbc-account-paid`), SBI UPI payment (`sbi-upi-debit`), SBI card
 spend in INR (`sbi-cc-spend`), SBI card cashback (`sbi-cc-cashback`), HSBC card spend in any currency
-(`hsbc-cc-spend`), HSBC NEFT out (`hsbc-neft-out`), HSBC money received by UPI (`hsbc-upi-credit`), AutoPay reminders
-ignored.
+(`hsbc-cc-spend`), HSBC NEFT out (`hsbc-neft-out`), HSBC NEFT in (`hsbc-neft-in`), HSBC money received by UPI
+(`hsbc-upi-credit`), HSBC card bill paid from an HSBC account (`hsbc-card-payment`), SBI Card payment received
+(`sbi-cc-payment`), AutoPay reminders ignored. HSBC's "26OCT" dates have no year: it is taken from when the SMS
+arrived (the year before, if that date would be later than the SMS).
 
 To do (each needs a real SMS with numbers and names replaced):
 
-- [ ] Self transfers SBI → HSBC and HSBC → SBI, both the money-out and money-in SMS. Have: SBI → HSBC
-      by UPI, HSBC side (`hsbc-upi-credit`). Still need: SBI side of it, and HSBC → SBI both sides.
-- [ ] SBI card bill paid through PhonePe: the SBI / HSBC UPI debit and SBI Card's payment-received SMS.
-- [ ] HSBC Premier card bill payment and any SMS it sends.
+- [x] Self transfers SBI → HSBC and HSBC → SBI. Both money-out SMS (`sbi-upi-debit`, `hsbc-account-paid`) give the
+      name the other account shows as, matched by the account's **Name shown when paid** list; HSBC's money-in
+      SMS gives the UPI ID. SBI's money-in SMS is not sent reliably, so it is not needed. NEFT between them is
+      matched by bank code and last digits (`SBIN ··4321`).
+- [x] SBI card bill paid through PhonePe: the UPI debit matches the card's bill name; SBI Card's
+      payment-received SMS (`sbi-cc-payment`) is always a self transfer.
+- [x] HSBC card bill paid from the HSBC account (`hsbc-card-payment`), always a self transfer.
 - [x] Money received by UPI into HSBC (`hsbc-upi-credit`).
 - [ ] Money received by UPI into SBI.
 - [ ] Zerodha from SBI (UPI AutoPay, UPI or NEFT/IMPS).
@@ -191,11 +196,10 @@ To do (each needs a real SMS with numbers and names replaced):
       sender filter). If they do, the investment would be counted twice.
 - [ ] Refunds or reversals on either card.
 - [ ] SBI card spend in a foreign currency, if it happens.
-- [ ] Salary or other incoming NEFT/IMPS into HSBC or SBI.
+- [x] Salary by NEFT into HSBC (`hsbc-neft-in`), counted as received.
+- [ ] Other incoming NEFT/IMPS into SBI.
 - [x] Self transfers left out of totals (still listed in See All): **More → My Accounts** (`lib/accounts.js`,
       `fintrack/data/accounts.json` in iCloud, never in the repo). It matches a counterparty equal to one of your
-      UPI IDs, or money out to a name containing a card's bill name.
-- [ ] SBI's UPI debit SMS gives a person's name, not a UPI ID, so the SBI side of SBI → HSBC is not matched yet.
-      It needs a real SMS to decide how (for example, the name your own HSBC account shows as).
-- [ ] Card "payment received" SMS (SBI Card, HSBC): no template yet. Once there is one, mark it as a self transfer too.
+      UPI IDs or **Names shown when paid**, a NEFT to or from one of your accounts, money out to a name
+      containing a card's bill name, and every card bill-paid SMS.
 

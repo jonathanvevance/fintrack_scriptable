@@ -51,7 +51,15 @@
       { id: "self-in", date: "2026-10-25", merchant: "you.name@sbi", bank: "HSBC", account: "6001", currency: "INR", amountPaise: 2000000, template: "hsbc-upi-credit", confidence: "high",
         raw: "Your HSBC Acc XXXXXX6001 is credited for INR 20,000.00 on 25-Oct-26 from you.name@sbi. UPI Ref No 600000000001", capturedAt: "2026-10-25T10:00:00Z" },
       { id: "self-bill", date: "2026-10-24", merchant: "SBI CARDS AND PAYMENT", bank: "HSBC", account: "6001", currency: "INR", amountPaise: -1543000, template: "hsbc-account-paid", confidence: "high",
-        raw: "INR 15,430.00 is paid from HSBC account XXXXXX6001 to SBI CARDS AND PAYMENT on 24-Oct-26 with ref 600000000002.", capturedAt: "2026-10-24T10:00:00Z" });
+        raw: "INR 15,430.00 is paid from HSBC account XXXXXX6001 to SBI CARDS AND PAYMENT on 24-Oct-26 with ref 600000000002.", capturedAt: "2026-10-24T10:00:00Z" },
+      { id: "self-name", date: "2026-10-23", merchant: "A KUMAR", bank: "SBI", account: "4321", currency: "INR", amountPaise: -500000, template: "sbi-upi-debit", confidence: "high",
+        raw: "Dear UPI user A/C X4321 debited by 5000.00 on date 23Oct26 trf to A KUMAR Refno 600000000003 If not u? call-1800111109 for other services-18001234-SBI", capturedAt: "2026-10-23T10:00:00Z" },
+      { id: "self-neft", date: "2026-10-17", merchant: "ARJUN MEHTA (SBIN ··4321)", bank: "HSBC", account: null, currency: "INR", amountPaise: -2500000, template: "hsbc-neft-out", confidence: "high",
+        raw: "HSBC: Dear HSBC Customer, your NEFT transaction with reference number HSBCN00000000001 for INR 25,000.00 has been credited to the SBIN A/c XXXXXXX4321 of ARJUN MEHTA on 17-10-2026 at 16:08:02 .", capturedAt: "2026-10-17T10:00:00Z" },
+      { id: "self-card", date: "2026-10-26", merchant: "HSBC Card ··9012", card: "9012", bank: "HSBC", account: "001", currency: "INR", amountPaise: -1200000, template: "hsbc-card-payment", confidence: "high",
+        raw: "HSBC: Dear Customer, your HSBC A/c 000000***-001 has been debited with INR 12,000.00- on 26OCT as payment towards card ending with 9012 . Your avl Bal is 1,00,000.00.", capturedAt: "2026-10-26T10:00:00Z" },
+      { id: "salary", date: "2026-10-14", merchant: "ACME TECH PVT LTD (CITI ··7788)", bank: "HSBC", account: "001", currency: "INR", amountPaise: 15000000, template: "hsbc-neft-in", confidence: "high",
+        raw: "HSBC: A/c 000000***-001 is credited with INR 1,50,000.00 + on 14OCT at 12.35.54 with UTR CITIN00000000001 as NEFT from CITI A/c ***7788 of ACME TECH PVT LTD*** . Your Avl Bal is INR 2,00,000.00.", capturedAt: "2026-10-14T10:00:00Z" });
     if (back === 0) list.push({ id: "usd", date: "2026-10-19", merchant: "OPENAI *CHATGPT", bank: "HSBC", account: "1234", currency: "USD",
       amountPaise: -2000, template: "hsbc-cc-spend", confidence: "high", raw: "HSBC Credit Card used at OPENAI", capturedAt: "2026-10-19T10:00:00Z" });
     months[ym] = list.sort((a, b) => (a.date < b.date ? 1 : -1));
@@ -85,7 +93,7 @@
   };
   const accounts = [
     { bank: "SBI", account: { last4: "4321", name: "Savings", upi: ["you.name@sbi"] }, cards: [{ last4: "5678", name: "Cashback", bills: ["SBI CARDS"] }] },
-    { bank: "HSBC", account: { last4: "6001", name: "Savings", upi: ["you@okhsbc"] }, cards: [{ last4: "9012", name: "Premier", bills: ["HSBC CARD"] }] },
+    { bank: "HSBC", account: { last4: "6001", name: "Savings", upi: ["you@okhsbc"], names: ["A KUMAR"] }, cards: [{ last4: "9012", name: "Premier", bills: ["HSBC CARD"] }] },
   ];
   fintrack.load({ months, rules, categories: { Transfers: { emoji: "↔︎", colour: "#8e8e93" } }, accounts, unparsed, version: "preview · fake data", currentMonth: "2026-10" });
 </script>

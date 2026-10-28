@@ -366,10 +366,16 @@
         <button class="li plain" data-act="delete-tx"><span class="danger">Delete Transaction</span></button></div>`;
   }
 
-  // Why: "you@okhsbc is your HSBC Savings ··6001" or "SBI CARDS is how your SBI Cashback ··5678 bill shows".
+  // Why, by tx.self.kind (see compileAccounts): "you@okhsbc is your HSBC Savings ··6001."
   function selfView(tx) {
-    const why = tx.self.kind === "upi" ? `<b>${esc(tx.self.match)}</b> is your ${esc(tx.self.label)}.`
-      : `<b>${esc(tx.self.match)}</b> is how your ${esc(tx.self.label)} bill shows.`;
+    const { kind, match, label } = tx.self;
+    const why = {
+      upi: `<b>${esc(match)}</b> is your ${esc(label)}.`,
+      name: `<b>${esc(match)}</b> is how your ${esc(label)} shows when paid.`,
+      neft: `<b>${esc(match)}</b> is your ${esc(label)}.`,
+      bill: `<b>${esc(match)}</b> is how your ${esc(label)} bill shows.`,
+      card: `it pays ${label ? `your <b>${esc(label)}</b>` : "your card"} bill.`,
+    }[kind];
     return `${backNav("")}${txHead(tx, selfIcon("xl"))}
       <div class="group"><div class="li plain"><div class="main"><div class="t1">Kind</div></div><span class="val">↔︎ Self Transfer</span></div></div>
       <div class="sf" style="margin-top:-12px">Not counted as spending or money received: ${why}</div>
@@ -485,7 +491,8 @@
     const openBank = (i, glyph, title, sub) => `<button class="li" data-act="open-bank" data-i="${i}">${bankIcon(state.accounts[i].bank, glyph)}
       <div class="main"><div class="t1">${esc(title)}</div><div class="t2">${esc(sub)}</div></div><span class="chev"></span></button>`;
     const sections = state.accounts.map((b, i) => {
-      const rows = (b.account ? openBank(i, "🏦", accountLabel("", b.account).trim(), plural(b.account.upi.length, "UPI ID")) : "") +
+      const rows = (b.account ? openBank(i, "🏦", accountLabel("", b.account).trim(),
+        [plural(b.account.upi.length, "UPI ID"), (b.account.names || []).length ? plural(b.account.names.length, "name") : ""].filter(Boolean).join(" · ")) : "") +
         (b.cards || []).map((c) => openBank(i, "💳", accountLabel("", c).trim(), c.bills.length ? `Bill shows as ${c.bills.join(", ")}` : "No bill name yet")).join("");
       return `<div class="sh">${esc(b.bank)}</div><div class="group">${rows || openBank(i, "🏦", b.bank, "No account or card yet")}</div>`;
     }).join("");
@@ -514,7 +521,7 @@
     const rows = items.map((item, i) => `<div class="li plain"><div class="main"><div class="t1">${esc(item)}</div></div>
       <button class="danger" data-act="remove-${kind}" data-i="${i}">Remove</button></div>`).join("");
     const adding = screen[`adding_${kind}`]
-      ? `<div class="li plain"><input class="left" data-field="${kind}Input" value="${esc(screen[kind + "Input"])}" placeholder="${esc(placeholder)}" autocapitalize="off" autocorrect="off">
+      ? `<div class="li plain"><input class="left" data-field="${kind}Input" value="${esc(screen[kind + "Input"] || "")}" placeholder="${esc(placeholder)}" autocapitalize="off" autocorrect="off">
         <button class="link" data-act="add-${kind}">Add</button></div>`
       : `<button class="li plain" data-act="start-${kind}"><span class="link">${addLabel}</span></button>`;
     return rows + adding;
@@ -527,13 +534,17 @@
     const d = screen.draft;
     const cards = d.cards.map((c, i) => `<button class="li" data-act="open-card" data-i="${i}">${bankIcon(d.bank, "💳")}
       <div class="main"><div class="t1">${esc(accountLabel("", c).trim())}</div><div class="t2">${esc(c.bills.length ? `Bill shows as ${c.bills.join(", ")}` : "No bill name yet")}</div></div><span class="chev"></span></button>`).join("");
-    const sub = [d.account ? "1 account" : "No account", d.account ? plural(d.account.upi.length, "UPI ID") : "", plural(d.cards.length, "card")].filter(Boolean).join(" · ");
+    const sub = [d.account ? "1 account" : "No account", d.account ? plural(d.account.upi.length, "UPI ID") : "",
+      d.account && d.account.names.length ? plural(d.account.names.length, "name") : "", plural(d.cards.length, "card")].filter(Boolean).join(" · ");
     const account = d.account ? `<div class="group">
         <div class="li plain"><span>Last 4 digits</span>${last4Input(d.account.last4)}</div>
         <div class="li plain"><span>Name</span><input data-field="accountName" value="${esc(d.account.name)}" placeholder="e.g. Savings" autocapitalize="words"></div></div>
       <div class="sh">UPI IDs on this account</div>
       <div class="group">${rowList(screen, d.account.upi, "upi", "Add UPI ID", "e.g. name@okhsbc")}</div>
       <div class="sf">Money sent to or received from these counts as a self transfer. Each UPI app can give the account its own ID; add them all.</div>
+      <div class="sh">Name shown when paid</div>
+      <div class="group">${rowList(screen, d.account.names, "payee", "Add Name", "e.g. A KUMAR")}</div>
+      <div class="sf">The name another bank's SMS gives when you pay this account, such as SBI's "trf to …". The whole name must match; capital letters don't matter.</div>
       <div class="group"><button class="li plain" data-act="remove-account"><span class="danger">Remove Account</span></button></div>`
       : `<div class="group"><button class="li plain" data-act="add-account"><span class="link">Add Account</span></button></div>
       <div class="sf" style="margin-top:-12px">Leave this empty if you only have a card with ${esc(d.bank)}. UPI IDs go with the account.</div>`;
@@ -569,6 +580,7 @@
       d.account.last4 = d.account.last4.trim();
       d.account.name = d.account.name.trim();
       d.account.upi = withTyped(d.account.upi, screen.upiInput || "");
+      d.account.names = withTyped(d.account.names || [], screen.payeeInput || "");
     }
     return d;
   }
@@ -598,6 +610,7 @@
     const after = () => {
       parent.draft = bank;
       parent.upiInput = "";
+      parent.payeeInput = "";
       if (parent.index == null) parent.index = state.accounts.length - 1;
     };
     saveAccounts(index, bank, remove ? "Card deleted" : "Card saved", `${accountLabel(bank.bank, remove ? screen.draft : card)} is ${remove ? "gone" : "saved"}.`, { pop: true, after });
@@ -1122,6 +1135,25 @@
     if (box) box.focus();
   }
 
+  const ITEM_LISTS = { upi: (s) => s.draft.account.upi, payee: (s) => s.draft.account.names, bill: (s) => s.draft.bills };
+
+  // Adds what is typed in `<kind>Input` to the screen's list, once whatever the capitals.
+  function addItem(kind) {
+    const s = top();
+    const list = ITEM_LISTS[kind](s);
+    const value = (s[`${kind}Input`] || "").trim();
+    if (value && !list.some((x) => x.toLowerCase() === value.toLowerCase())) list.push(value);
+    s[`${kind}Input`] = "";
+    render();
+    const box = app.querySelector(`[data-field="${kind}Input"]`);
+    if (box) box.focus();
+  }
+
+  function removeItem(kind, el) {
+    ITEM_LISTS[kind](top()).splice(Number(el.dataset.i), 1);
+    render();
+  }
+
   function push(screen) {
     state.stack.push(screen);
     render();
@@ -1271,21 +1303,17 @@
     },
     "open-bank": (el) => {
       const bank = copyOf(state.accounts[Number(el.dataset.i)]);
+      if (bank.account) bank.account.names = bank.account.names || [];
       push({ type: "bank", index: Number(el.dataset.i), draft: { ...bank, cards: bank.cards || [] }, upiInput: "" });
     },
-    "add-account": () => { top().draft.account = { last4: "", name: "", upi: [] }; render(); },
-    "remove-account": () => { top().draft.account = null; top().upiInput = ""; render(); },
-    "add-upi": () => {
-      const s = top();
-      const id = s.upiInput.trim();
-      if (id && !s.draft.account.upi.some((u) => u.toLowerCase() === id.toLowerCase())) s.draft.account.upi.push(id);
-      s.upiInput = "";
-      render();
-      const box = app.querySelector('[data-field="upiInput"]');
-      if (box) box.focus();
-    },
-    "remove-upi": (el) => { top().draft.account.upi.splice(Number(el.dataset.i), 1); render(); },
+    "add-account": () => { top().draft.account = { last4: "", name: "", upi: [], names: [] }; render(); },
+    "remove-account": () => { top().draft.account = null; top().upiInput = ""; top().payeeInput = ""; render(); },
+    "add-upi": () => addItem("upi"),
+    "remove-upi": (el) => removeItem("upi", el),
     "start-upi": () => startAdding("upi"),
+    "add-payee": () => addItem("payee"),
+    "remove-payee": (el) => removeItem("payee", el),
+    "start-payee": () => startAdding("payee"),
     "start-bill": () => startAdding("bill"),
     "save-bank": () => {
       const s = top();
@@ -1306,16 +1334,8 @@
       push({ type: "card", cardIndex: i, draft: copyOf(top().draft.cards[i]), billInput: "" });
     },
     "add-card": () => push({ type: "card", cardIndex: null, draft: { last4: "", name: "", bills: [] }, billInput: "" }),
-    "add-bill": () => {
-      const s = top();
-      const name = s.billInput.trim();
-      if (name && !s.draft.bills.some((b) => b.toLowerCase() === name.toLowerCase())) s.draft.bills.push(name);
-      s.billInput = "";
-      render();
-      const box = app.querySelector('[data-field="billInput"]');
-      if (box) box.focus();
-    },
-    "remove-bill": (el) => { top().draft.bills.splice(Number(el.dataset.i), 1); render(); },
+    "add-bill": () => addItem("bill"),
+    "remove-bill": (el) => removeItem("bill", el),
     "save-card": () => saveCard(top()),
     "delete-card": () => showDialog("Delete Card?", `${accountLabel("", top().draft).trim()} is removed. Paying its bill counts as spending again.`,
       [["Cancel", "close"], ["Delete", "delete-card-confirm", true]]),
@@ -1333,7 +1353,7 @@
     if (!name || !screen) return;
     if (screen.type === "category" || screen.type === "add-bank") screen[name] = e.target.value;
     if (screen.type === "bank") {
-      if (name === "upiInput") screen.upiInput = e.target.value;
+      if (name === "upiInput" || name === "payeeInput") screen[name] = e.target.value;
       else screen.draft.account[name === "accountName" ? "name" : name] = e.target.value;
     }
     if (screen.type === "card") {
@@ -1357,7 +1377,7 @@
   });
 
   // Enter in a list's input works like its Add button: [action, list].
-  const ENTER_ADDS = { recipientInput: ["add-word", "recipients"], wordInput: ["add-word", "words"], upiInput: ["add-upi"], billInput: ["add-bill"], otherInput: ["add-other-bank"] };
+  const ENTER_ADDS = { recipientInput: ["add-word", "recipients"], wordInput: ["add-word", "words"], upiInput: ["add-upi"], payeeInput: ["add-payee"], billInput: ["add-bill"], otherInput: ["add-other-bank"] };
   app.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && e.target.dataset && e.target.dataset.field === "nameInput") return e.target.blur();
     const add = e.key === "Enter" && e.target.dataset && ENTER_ADDS[e.target.dataset.field];

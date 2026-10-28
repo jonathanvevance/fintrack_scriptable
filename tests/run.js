@@ -87,6 +87,28 @@ const cases = [
     expect: { template: "hsbc-neft-out", bank: "HSBC", accountType: "bank", account: null, merchant: "ANITA SHARMA (HDFC ··1111)", currency: "INR", amountPaise: -800000, date: "2026-10-20" },
   },
   {
+    name: "HSBC NEFT received, date without a year",
+    sms: "HSBC: A/c 041234***-001 is credited with INR 1,50,000.00 + on 14OCT at 12.35.54 with UTR CITIN26287123456 as NEFT from CITI A/c ***7788 of ACME TECH PVT LTD*** . Your Avl Bal is INR 2,00,000.00.",
+    keys: KEYS.concat(["ref"]),
+    expect: { template: "hsbc-neft-in", bank: "HSBC", accountType: "bank", account: "001", merchant: "ACME TECH PVT LTD (CITI ··7788)", currency: "INR", amountPaise: 15000000, date: "2026-10-14", ref: "CITIN26287123456" },
+  },
+  {
+    name: "HSBC account pays an HSBC card",
+    sms: "HSBC: Dear Customer, your HSBC A/c 041234***-001 has been debited with INR 15,430.00- on 26OCT as payment towards card ending with 9012 . Your avl Bal is 84,570.00.",
+    keys: KEYS.concat(["card"]),
+    expect: { template: "hsbc-card-payment", bank: "HSBC", accountType: "bank", account: "001", merchant: "HSBC Card ··9012", currency: "INR", amountPaise: -1543000, date: "2026-10-26", card: "9012" },
+  },
+  {
+    name: "SBI card payment received via BBPS",
+    sms: "We have received payment of Rs.15,430.00 via BBPS & the same has been credited to your SBI Credit Card. Your available limit is Rs 1,20,000.00",
+    expect: { template: "sbi-cc-payment", bank: "SBI", accountType: "credit_card", account: null, merchant: "Bill payment via BBPS", currency: "INR", amountPaise: 1543000, date: "2026-10-27" },
+  },
+  {
+    name: "SBI card payment received, older wording with card and date",
+    sms: "We have received payment of Rs.2,000.00 via NEFT and same has been credited to your SBI Card no XXXX5678 on 20-Oct-26.",
+    expect: { template: "sbi-cc-payment", bank: "SBI", accountType: "credit_card", account: "5678", merchant: "Bill payment via NEFT", currency: "INR", amountPaise: 200000, date: "2026-10-20" },
+  },
+  {
     name: "SBI card spend at Amazon",
     sms: "Rs.1,234.00 spent on your SBI Credit Card ending 5678 at AMAZONPAYINDIAPRIVA on 21/10/26. Trxn. not done by you? Report at https://sbicard.com/Dispute",
     keys: KEYS.concat(["merchantRaw"]),
@@ -336,8 +358,10 @@ eq("recurring: sorted by day", recurring([pay("B", "2026-09-20", 10), pay("B", "
 // Made-up accounts; real ones live only in fintrack/data/accounts.json.
 const MINE = [
   { bank: "SBI", account: { last4: "4321", name: "Savings", upi: ["you.name@sbi"] }, cards: [{ last4: "5678", name: "Cashback", bills: ["SBI CARDS"] }] },
-  { bank: "HSBC", account: null, cards: [{ last4: "9012", name: "", bills: ["HSBC CARD"] }] },
+  { bank: "HSBC", account: { last4: "6001", name: "", upi: [], names: ["A KUMAR"] }, cards: [{ last4: "9012", name: "", bills: ["HSBC CARD"] }] },
 ];
+const sms = (text) => parseSms(text, RECEIVED);
+const accountsError = (list) => { try { checkAccounts(list); return null; } catch (e) { return e.message; } };
 const isSelf = compileAccounts(MINE);
 eq("self: received from your UPI ID (any case)", isSelf(tx({ merchant: "You.Name@SBI", amountPaise: 2000000 })), { kind: "upi", match: "you.name@sbi", label: "SBI Savings ··4321" });
 eq("self: paid to your UPI ID", isSelf(tx({ merchant: "you.name@sbi", amountPaise: -100 })).kind, "upi");
@@ -348,7 +372,26 @@ eq("self: money in from a bill name is not a bill payment", isSelf(tx({ merchant
 eq("self: someone else", isSelf(tx({ merchant: "RAHUL KUMAR" })), null);
 eq("self: no name", isSelf(tx({ merchant: null })), null);
 eq("self: nothing listed", compileAccounts([])(tx({ merchant: "you.name@sbi" })), null);
-const accountsError = (list) => { try { checkAccounts(list); return null; } catch (e) { return e.message; } };
+eq("self: name your account shows when paid (any case, spaces)", isSelf(tx({ merchant: "a  kumar" })), { kind: "name", match: "A KUMAR", label: "HSBC ··6001" });
+eq("self: that name must be the whole name", isSelf(tx({ merchant: "A KUMAR SINGH" })), null);
+eq("self: SBI pays your HSBC by UPI",
+  isSelf(sms("Dear UPI user A/C X4321 debited by 20000.00 on date 28Oct26 trf to A KUMAR Refno 630012345678 If not u? call-1800111109 for other services-18001234-SBI")).kind, "name");
+eq("self: NEFT to your SBI account", isSelf(tx({ merchant: "ARJUN MEHTA (SBIN ··4321)" })), { kind: "neft", match: "SBIN ··4321", label: "SBI Savings ··4321" });
+eq("self: NEFT to someone else's SBI account", isSelf(tx({ merchant: "ARJUN MEHTA (SBIN ··9999)" })), null);
+eq("self: NEFT to a bank you haven't listed", isSelf(tx({ merchant: "ANITA SHARMA (HDFC ··4321)" })), null);
+eq("self: NEFT matches 3 shown digits", isSelf(tx({ merchant: "X (HSBC ··001)", amountPaise: 100 })).label, "HSBC ··6001");
+eq("self: salary by NEFT is money received",
+  isSelf(sms("HSBC: A/c 041234***-001 is credited with INR 1,50,000.00 + on 14OCT at 12.35.54 with UTR CITIN26287123456 as NEFT from CITI A/c ***7788 of ACME TECH PVT LTD*** . Your Avl Bal is INR 2,00,000.00.")), null);
+eq("self: HSBC card bill paid from HSBC account",
+  isSelf(sms("HSBC: Dear Customer, your HSBC A/c 041234***-001 has been debited with INR 15,430.00- on 26OCT as payment towards card ending with 9012 . Your avl Bal is 84,570.00.")),
+  { kind: "card", match: "HSBC Card ··9012", label: "HSBC ··9012" });
+eq("self: card bill paid, card not listed", compileAccounts([])(sms("HSBC: Dear Customer, your HSBC A/c 041234***-001 has been debited with INR 1.00- on 26OCT as payment towards card ending with 4444 . Your avl Bal is 1.00.")).label, "");
+eq("self: SBI card payment received",
+  isSelf(sms("We have received payment of Rs.15,430.00 via BBPS & the same has been credited to your SBI Credit Card. Your available limit is Rs 1,20,000.00")).label, "SBI Cashback ··5678");
+eq("date: December SMS read in January is last year",
+  parseSms("HSBC: Dear Customer, your HSBC A/c 041234***-001 has been debited with INR 1.00- on 28DEC as payment towards card ending with 9012 . Your avl Bal is 1.00.", new Date(2027, 0, 3, 9)).date, "2026-12-28");
+eq("accounts: names are optional", accountsError([{ bank: "SBI", account: { last4: "1234", name: "", upi: [] }, cards: [] }]), null);
+eq("accounts: empty name shown when paid", accountsError([{ bank: "SBI", account: { last4: "1234", name: "", upi: [], names: [""] }, cards: [] }]), "Name shown when paid is empty");
 eq("accounts: valid list", accountsError(MINE), null);
 eq("accounts: bank with nothing yet is fine", accountsError([{ bank: "ICICI", account: null, cards: [] }]), null);
 eq("accounts: same bank twice", accountsError([{ bank: "SBI", account: null, cards: [] }, { bank: "sbi", account: null, cards: [] }]), "sbi is listed twice");
