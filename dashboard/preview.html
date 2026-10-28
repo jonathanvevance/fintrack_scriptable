@@ -52,11 +52,23 @@
     { when: { account: "1234" }, set: { owner: "Wife" } },
     { when: { direction: "out", minAmount: 10000 }, set: { tags: ["large"] } },
   ];
-  fintrack.send = (payload) => {
-    console.log("[preview] Scriptable would save:", JSON.stringify(payload, null, 1));
-    setTimeout(() => fintrack.saved(true, ""), 150);
+  const unparsed = [
+    { id: "u1", text: "Your a/c XX4321 has a pending mandate of Rs 499.00 for NETFLIX on 30-10-26." },
+    { id: "u2", text: "Rs.250 sent via PhonePe to 98XXXXXX12 from A/c X7788." },
+  ];
+  fintrack.send = (message) => {
+    console.log("[preview] Scriptable would run:", JSON.stringify(message, null, 1));
+    const replies = {
+      save: { ok: true },
+      pasteSms: { ok: true, title: "Saved", message: "−₹120.00 Swiggy (preview)" },
+      copy: { ok: true, title: "Copied", message: "" },
+      deleteTx: { ok: true, title: "Deleted", message: "Preview only: nothing was deleted." },
+      clearUnparsed: { ok: true, title: "Cleared", message: "", data: { months, rules, unparsed: [], version: "preview" } },
+      update: { ok: true, title: "Updating", message: "Open FinTrack again when the update has finished." },
+    };
+    setTimeout(() => fintrack.reply(replies[message.action] || { ok: false, message: "Unknown action" }), 150);
   };
-  fintrack.load({ months, rules, currentMonth: "2026-10" });
+  fintrack.load({ months, rules, unparsed, version: "preview · fake data", currentMonth: "2026-10" });
 </script>
 </body>
 </html>

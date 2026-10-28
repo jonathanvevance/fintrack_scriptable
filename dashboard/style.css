@@ -88,7 +88,7 @@ input::placeholder { color: var(--sec); }
 
 /* Tab bar */
 .tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 4; display: flex; justify-content: space-around; padding: 7px 0 calc(8px + env(safe-area-inset-bottom)); border-top: .5px solid var(--sep); background: color-mix(in srgb, var(--card) 85%, transparent); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); }
-.tabbar button { width: 90px; text-align: center; font-size: 10px; font-weight: 500; color: var(--sec); }
+.tabbar button { width: 76px; text-align: center; font-size: 10px; font-weight: 500; color: var(--sec); }
 .tabbar svg { display: block; margin: 0 auto 3px; width: 26px; height: 24px; fill: currentColor; }
 .tabbar .on { color: var(--blue); }
 

@@ -10,14 +10,14 @@ Code lives here; data never does. Transactions are stored as JSON in Scriptable'
 |---|---|
 | `FinTrack Update` | Downloads the latest code from this repo (files listed in `manifest.json`). Never touches `fintrack/data/`. |
 | `FinTrack SMS` | Run by a Shortcuts message automation. Parses the SMS, saves it, posts a notification. No network. |
-| `FinTrack` | Month view: totals, transactions, unrecognised messages, paste-an-SMS, update. Also works as a widget. |
+| `FinTrack` | Opens the dashboard (see below). Also works as a widget. |
 
 Library code goes to `fintrack/lib/` inside Scriptable's folder.
 
 ## One-time iPhone setup
 
 1. **Install.** In Safari on the iPhone, open [`scripts/FinTrack Update.js` (raw)](https://raw.githubusercontent.com/jonathanvevance/fintrack_scriptable/master/scripts/FinTrack%20Update.js), select all, copy. In Scriptable tap **+**, paste, rename the script to exactly `FinTrack Update`, tap **Done**, then run it. `FinTrack` and `FinTrack SMS` appear in the list.
-2. **Try it.** Copy any bank SMS from Messages, run `FinTrack`, tap **Add SMS from clipboard**.
+2. **Try it.** Copy any bank SMS from Messages, run `FinTrack`, go to **More** and tap **Add SMS from Clipboard**.
 3. **Automate.** Shortcuts → **Automation** → **+** → **Message**:
    - **Message Contains**: `debited` (leave Sender empty) → **Run Immediately** → **Next**.
    - **New Blank Automation** → add action **Scriptable → Run Script** → Script: `FinTrack SMS`.
@@ -27,23 +27,23 @@ Library code goes to `fintrack/lib/` inside Scriptable's folder.
 
 ## Updating
 
-Push to `master`, then on the phone run `FinTrack Update` (or tap **Update FinTrack** at the bottom of `FinTrack`).
+Push to `master`, then on the phone run `FinTrack Update` (or tap **More → Update FinTrack** in `FinTrack`).
 
 If `FinTrack SMS` fails, it keeps the message on the phone (`fintrack-pending.json` in Scriptable's local folder) and notifies you; opening `FinTrack` saves it. A data file that cannot be read is never overwritten: it is copied to `*.corrupt-<time>.json` and FinTrack shows the error.
 
 ## Tagging
 
-Rules live only on the phone, in `fintrack/data/rules.json` (never in this repo, never touched by updates). The format is in `lib/tags.js`; `rules.example.json` has samples. Tap a transaction and choose **Always tag … as…** to add a rule without editing the file, or **Set category…** for that one transaction.
+Rules live only on the phone, in `fintrack/data/rules.json` (never in this repo, never touched by updates). The format is in `lib/tags.js`; `rules.example.json` has samples. In the dashboard, tap a transaction and pick a category; turn on **Always** to make it a rule, or leave it off for just that transaction. The **Rules** tab edits the full list.
 
 ## Dashboard
 
-In `FinTrack`, tap **Open dashboard**. It is the page in `dashboard/`, shown by Scriptable in a web view (`lib/dashboard.js`) with every month and the rules handed in directly: no file picker, no network. Tabs: **Month** (totals, spend per category, tap a transaction to start a rule), **Rules** (add, edit, reorder, delete, each with its match count) and **Trends** (last 6 months). Saving a rule sends the whole list to Scriptable, which checks it and writes `rules.json`; the saved alert has **Undo**.
+Opening `FinTrack` shows the page in `dashboard/`, run by Scriptable in a web view (`lib/dashboard.js`) with every month, the rules and unrecognised messages handed in directly: no file picker, no network. Tabs: **Spending** (month totals, spend per category, transactions), **Insights** (changes against last month, 6-month chart), **Rules** (add, edit, reorder, delete, each with its match count) and **More** (add an SMS from the clipboard, unrecognised messages, update, version). The page cannot write files: it asks Scriptable (`fintrack://do?...`), which checks the request, does it and replies. Saving a rule sends the whole list, which Scriptable validates before writing `rules.json`; the saved alert has **Undo**.
 
-To work on it on a laptop, open `dashboard/preview.html` (fake data; Save logs to the console).
+To work on it on a laptop, open `dashboard/preview.html` (fake data; requests are logged to the console).
 
 ## Adding a bank template
 
-Templates live in `lib/parse.js` (`TEMPLATES`). Messages no template recognises go to the generic parser (marked "check") or to **Unrecognised** in `FinTrack`, where **Copy text** gives you the exact wording to add a template and a test case for.
+Templates live in `lib/parse.js` (`TEMPLATES`). Messages no template recognises go to the generic parser (marked "check") or to **More → Unrecognised Messages** in `FinTrack`, where tapping a message (or **Copy All for Review**) gives you the exact wording to add a template and a test case for.
 
 ## Tests
 

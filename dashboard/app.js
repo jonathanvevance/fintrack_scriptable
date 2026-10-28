@@ -1,8 +1,10 @@
 // FinTrack dashboard. Scriptable shows this page in a WebView and calls fintrack.load(data) with
-//   { months: { "YYYY-MM": [tx] }, rules: [rule], currentMonth: "YYYY-MM" }.
-// The page never writes files. Changes go out through fintrack.send(payload), where payload is
-//   { rules?: [rule], manual?: { ym, id, manual } }
-// and are applied here only when Scriptable answers fintrack.saved(ok, message).
+//   { months: { "YYYY-MM": [tx] }, rules: [rule], unparsed: [{ id, text }], version, currentMonth: "YYYY-MM" }.
+// The page never writes files. Requests go out through fintrack.send({ action, ... }):
+//   save { rules?: [rule], manual?: { ym, id, manual } }, pasteSms, copy { text }, deleteTx { ym, id },
+//   clearUnparsed, update.
+// Scriptable answers fintrack.reply({ ok, title?, message?, data?, ym? }); `data` replaces what
+// fintrack.load gave. Saves are applied here only once the reply says ok.
 // Needs FT.tags (lib/tags.js) and FT.format (lib/format.js) loaded first.
 
 (function () {
@@ -50,11 +52,14 @@
     months: {},
     rules: [],
     compiled: [],
+    unparsed: [],
+    version: "",
     ym: null,
     tab: "spending",
     stack: [], // pushed screens: { type: "tx" | "list" | "categories" | "rule", ... }
     dialog: null,
-    pending: null,
+    pending: null, // a save waiting for Scriptable's reply
+    pendingAction: null, // options for any other request waiting for a reply
   };
 
   function setRules(rules) {
@@ -219,7 +224,10 @@
       ${tx.merchant ? `<div class="group"><button class="li plain" data-act="toggle-always"><div class="main"><div class="t1" style="white-space:normal">Always tag ${esc(tx.merchant)} as ${esc(screen.draft || "…")}</div>
           <div class="t2">Applies to ${plural(sameMerchant, "transaction")} now and every future one</div></div><span class="toggle ${screen.always ? "on" : ""}"></span></button></div>` : ""}
       <div class="sh">Message</div>
-      <div class="group pad muted small" style="line-height:1.4;user-select:text;-webkit-user-select:text">${esc(tx.raw)}</div>`;
+      <div class="group pad muted small" style="line-height:1.4;user-select:text;-webkit-user-select:text">${esc(tx.raw)}</div>
+      <div class="group">
+        <button class="li plain" data-act="copy-sms"><span class="link">Copy SMS</span></button>
+        <button class="li plain" data-act="delete-tx"><span class="danger">Delete Transaction</span></button></div>`;
   }
 
   function saveTx(screen) {
@@ -241,6 +249,48 @@
     if (!payload.rules && !payload.manual) return back();
     const detail = payload.rules ? `Every ${tx.merchant} transaction is now ${category}.` : `This transaction is now ${category}.`;
     commit(payload, payload.rules ? "Rule saved" : "Category saved", detail, { pop: true });
+  }
+
+  // ---- More: capture by hand, unrecognised messages, update ----
+
+  function toCheck() {
+    return allTx().filter((t) => t.confidence === "low");
+  }
+
+  function reviewText() {
+    return [
+      ...state.unparsed.map((u) => `[unrecognised]\n${u.text}`),
+      ...toCheck().map((t) => `[check: parsed as ${money(t.amountPaise, t.currency)} ${t.bank || "?"} ··${t.account || "?"}]\n${t.raw}`),
+    ].join("\n\n---\n\n");
+  }
+
+  function moreView() {
+    const review = state.unparsed.length + toCheck().length;
+    return `<div style="height:44px"></div><div class="large">More</div>
+      <div class="sh">Add</div>
+      <div class="group"><button class="li plain" data-act="paste-sms"><span class="link">Add SMS from Clipboard</span></button></div>
+      <div class="sf">Copy a bank SMS in Messages first. It is saved the same way the automation would.</div>
+      <div class="sh">Review</div>
+      <div class="group">
+        <button class="li plain" data-act="open-unparsed"><div class="main"><div class="t1">Unrecognised Messages</div></div><span class="val">${state.unparsed.length}</span><span class="chev"></span></button>
+        <div class="li plain"><div class="main"><div class="t1">Parsed with low confidence</div></div><span class="val">${toCheck().length}</span></div>
+        ${review ? `<button class="li plain" data-act="copy-review"><span class="link">Copy All for Review</span></button>` : ""}
+      </div>
+      <div class="sf">Paste the copied messages into the FinTrack dev chat to get bank templates added.</div>
+      <div class="sh">App</div>
+      <div class="group">
+        <button class="li plain" data-act="update"><span class="link">Update FinTrack</span></button>
+        <div class="li plain"><div class="main"><div class="t1">Version</div></div><span class="val small" style="white-space:normal;text-align:right;max-width:65%">${esc(state.version || "unknown")}</span></div>
+      </div>`;
+  }
+
+  function unparsedView() {
+    const rows = state.unparsed
+      .map((u) => `<button class="li plain" data-act="copy-unparsed" data-id="${esc(u.id)}"><div class="main"><div class="t2" style="white-space:normal;color:var(--text);font-size:15px;line-height:1.35">${esc(u.text)}</div></div></button>`)
+      .join("");
+    return `${backNav("Unrecognised", state.unparsed.length ? `<button data-act="clear-unparsed">Clear</button>` : "")}<div style="height:8px"></div>
+      <div class="group">${rows || `<div class="empty">Nothing unrecognised</div>`}</div>
+      ${rows ? `<div class="sf" style="margin-top:-12px">Tap a message to copy it.</div>` : ""}`;
   }
 
   // ---- Insights (Health style) ----
@@ -443,7 +493,30 @@
       undo.manual = { ...payload.manual, manual: (tx && tx.manual) || {} };
     }
     state.pending = { payload, undo, title, detail, ...options };
-    fintrack.send(payload);
+    fintrack.send({ action: "save", ...payload });
+  }
+
+  // Anything other than a save: Scriptable does it and may send fresh data back.
+  function request(action, fields = {}, options = {}) {
+    state.pendingAction = options;
+    fintrack.send({ action, ...fields });
+  }
+
+  function useData(data) {
+    state.months = data.months || {};
+    state.unparsed = data.unparsed || [];
+    state.version = data.version || "";
+    setRules(data.rules || []);
+  }
+
+  function reply(result) {
+    if (state.pending) return saved(result.ok, result.message);
+    const options = state.pendingAction || {};
+    state.pendingAction = null;
+    if (result.data) useData(result.data);
+    if (result.ym) state.ym = result.ym;
+    if (result.ok && options.pop) state.stack.pop();
+    showDialog(result.title || (result.ok ? "Done" : "Something went wrong"), result.message || "");
   }
 
   function saved(ok, message) {
@@ -489,6 +562,7 @@
     spending: '<svg viewBox="0 0 26 24"><rect x="1" y="4" width="24" height="16" rx="3.5"/><rect x="1" y="8" width="24" height="3" fill="var(--card)"/></svg>',
     insights: '<svg viewBox="0 0 26 24"><rect x="3" y="12" width="5" height="9" rx="1.5"/><rect x="10.5" y="6" width="5" height="15" rx="1.5"/><rect x="18" y="2" width="5" height="19" rx="1.5"/></svg>',
     rules: '<svg viewBox="0 0 26 24"><rect x="2" y="3" width="22" height="4" rx="2"/><rect x="2" y="10" width="16" height="4" rx="2"/><rect x="2" y="17" width="19" height="4" rx="2"/></svg>',
+    more: '<svg viewBox="0 0 26 24"><circle cx="5" cy="12" r="2.6"/><circle cx="13" cy="12" r="2.6"/><circle cx="21" cy="12" r="2.6"/></svg>',
   };
 
   function render() {
@@ -497,9 +571,9 @@
       return;
     }
     const screen = top();
-    const views = { tx: txView, list: listView, categories: categoriesView, rule: ruleView };
-    const body = screen ? views[screen.type](screen) : { spending: spendingView, insights: insightsView, rules: rulesView }[state.tab]();
-    const tabs = screen ? "" : `<nav class="tabbar">${["spending", "insights", "rules"]
+    const views = { tx: txView, list: listView, categories: categoriesView, rule: ruleView, unparsed: unparsedView };
+    const body = screen ? views[screen.type](screen) : { spending: spendingView, insights: insightsView, rules: rulesView, more: moreView }[state.tab]();
+    const tabs = screen ? "" : `<nav class="tabbar">${["spending", "insights", "rules", "more"]
       .map((id) => `<button data-act="tab" data-value="${id}" class="${state.tab === id ? "on" : ""}">${TAB_ICONS[id]}${id[0].toUpperCase() + id.slice(1)}</button>`).join("")}</nav>`;
     app.innerHTML = `<div class="screen ${screen ? "no-tabs" : ""}">${body}</div>${tabs}${dialogView()}`;
   }
@@ -555,6 +629,20 @@
       commit(undo, "Undone", "Back to how it was.", { isUndo: true });
     },
     close: () => { state.dialog = null; render(); },
+    "copy-sms": () => request("copy", { text: findTx(top().ym, top().id).raw }),
+    "delete-tx": () => {
+      const tx = findTx(top().ym, top().id);
+      showDialog("Delete Transaction?", `${tx.merchant || tx.bank || "This transaction"}, ${money(Math.abs(tx.amountPaise), tx.currency)}. This cannot be undone.`,
+        [["Cancel", "close"], ["Delete", "delete-tx-confirm", true]]);
+    },
+    "delete-tx-confirm": () => { state.dialog = null; render(); request("deleteTx", { ym: top().ym, id: top().id }, { pop: true }); },
+    "paste-sms": () => request("pasteSms"),
+    "open-unparsed": () => push({ type: "unparsed" }),
+    "copy-unparsed": (el) => request("copy", { text: state.unparsed.find((u) => u.id === el.dataset.id).text }),
+    "copy-review": () => request("copy", { text: reviewText() }),
+    "clear-unparsed": () => showDialog("Clear Unrecognised?", `${plural(state.unparsed.length, "message")} will be removed.`, [["Cancel", "close"], ["Clear", "clear-confirm", true]]),
+    "clear-confirm": () => { state.dialog = null; render(); request("clearUnparsed", {}, { pop: true }); },
+    update: () => request("update"),
   };
 
   app.addEventListener("click", (e) => {
@@ -574,17 +662,16 @@
   });
 
   function load(data) {
-    state.months = data.months || {};
-    setRules(data.rules || []);
+    useData(data);
     state.ym = data.currentMonth || Object.keys(state.months).sort().pop() || "2026-01";
     render();
   }
 
   window.fintrack = {
     load,
-    saved,
-    send: (payload) => {
-      location.href = "fintrack://save?data=" + encodeURIComponent(JSON.stringify(payload));
+    reply,
+    send: (message) => {
+      location.href = "fintrack://do?data=" + encodeURIComponent(JSON.stringify(message));
     },
   };
   render();
