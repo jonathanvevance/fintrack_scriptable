@@ -450,7 +450,7 @@
     const views = [["trends", "Trends"], ["recurring", "Recurring"], ["merchants", "Recipients"]];
     const seg = `<div class="seg wide">${views.map(([v, label]) => `<button data-act="trends-view" data-value="${v}" class="${state.trends === v ? "on" : ""}">${label}</button>`).join("")}</div>`;
     const body = { trends: categoryTrend, recurring: recurringList, merchants: merchantBubbles }[state.trends]();
-    return `<div class="large first">${views.find(([v]) => v === state.trends)[1]}</div>${seg}${body}`;
+    return `<div class="large first">Insights</div>${seg}${body}`;
   }
 
   // One category's money out per month, last 6 or 12 months up to this month.
