@@ -168,19 +168,24 @@ Decisions:
   recharge, and Zerodha investments, counted once).
 - Paying a credit card bill is a self transfer: the card purchases are already counted. This covers the
   SBI card bill paid through PhonePe from SBI or HSBC UPI.
-- Self transfers are recognised from exact SMS templates, not guessed.
+- Self transfers are recognised from exact SMS templates, not guessed. Templates stay generic; which
+  UPI IDs and accounts are the user's own is private data under `fintrack/data`, never in this repo
+  (tests use made-up IDs).
 - Foreign-currency card spends stay separate from the INR total.
 
 Already covered: HSBC UPI payment (`hsbc-account-paid`), SBI UPI payment (`sbi-upi-debit`), SBI card
 spend in INR (`sbi-cc-spend`), SBI card cashback (`sbi-cc-cashback`), HSBC card spend in any currency
-(`hsbc-cc-spend`), HSBC NEFT out (`hsbc-neft-out`), AutoPay reminders ignored.
+(`hsbc-cc-spend`), HSBC NEFT out (`hsbc-neft-out`), HSBC money received by UPI (`hsbc-upi-credit`), AutoPay reminders
+ignored.
 
 To do (each needs a real SMS with numbers and names replaced):
 
-- [ ] Self transfers SBI → HSBC and HSBC → SBI, both the money-out and money-in SMS.
+- [ ] Self transfers SBI → HSBC and HSBC → SBI, both the money-out and money-in SMS. Have: SBI → HSBC
+      by UPI, HSBC side (`hsbc-upi-credit`). Still need: SBI side of it, and HSBC → SBI both sides.
 - [ ] SBI card bill paid through PhonePe: the SBI / HSBC UPI debit and SBI Card's payment-received SMS.
 - [ ] HSBC Premier card bill payment and any SMS it sends.
-- [ ] Money received by UPI into HSBC and into SBI.
+- [x] Money received by UPI into HSBC (`hsbc-upi-credit`).
+- [ ] Money received by UPI into SBI.
 - [ ] Zerodha from SBI (UPI AutoPay, UPI or NEFT/IMPS).
 - [ ] Find out from the phone's messages whether Zerodha's own SMS reach FinTrack (the SMS automation's
       sender filter). If they do, the investment would be counted twice.
