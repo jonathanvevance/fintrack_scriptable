@@ -97,6 +97,16 @@ const cases = [
     expect: { template: "sbi-cc-spend", bank: "SBI", accountType: "credit_card", account: "5678", merchant: "UBER INDIA SYSTEMS", currency: "INR", amountPaise: -8900, date: "2026-10-22" },
   },
   {
+    name: "SBI Card monthly cashback",
+    sms: "It's Cashback Time! Happy to share that Rs 599 has been credited to your CASHBACK SBI Card account for the month of Oct'26 - SBI Card",
+    expect: { template: "sbi-cc-cashback", bank: "SBI", accountType: "credit_card", account: null, merchant: "SBI Card Cashback", currency: "INR", amountPaise: 59900, date: "2026-10-27" },
+  },
+  {
+    name: "SBI Card cashback with paise",
+    sms: "It's Cashback Time! Happy to share that Rs.1,212.50 has been credited to your CASHBACK SBI Card account for the month of Nov'26 - SBI Card",
+    expect: { template: "sbi-cc-cashback", bank: "SBI", accountType: "credit_card", account: null, merchant: "SBI Card Cashback", currency: "INR", amountPaise: 121250, date: "2026-10-27" },
+  },
+  {
     name: "SBI AutoPay reminder is not a transaction",
     sms: "Dear UPI User, UPI AutoPay for Indian Clearing Corporation Ltd debit of Rs.5000.00 is scheduled on .16/10/26, abc123@yespay. Please ensure sufficient balance in your account. -SBI",
     expect: null,
