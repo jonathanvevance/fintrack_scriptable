@@ -37,7 +37,7 @@ Rules live only on the phone, in `fintrack/data/rules.json` (never in this repo,
 
 ## Dashboard
 
-Opening `FinTrack` shows the page in `dashboard/`, run by Scriptable in a web view (`lib/dashboard.js`) with every month, the rules and unrecognised messages handed in directly: no file picker, no network. Tabs: **Spending** (month total, spend per category with its transactions, latest transactions), **Insights** (changes against last month, 6-month chart), **Rules** (add, edit, reorder, delete, each with its match count) and **More** (add an SMS from the clipboard, unrecognised messages, update, version). The page cannot write files: it asks Scriptable (`fintrack://do?...`), which checks the request, does it and replies. Saving a rule sends the whole list, which Scriptable validates before writing `rules.json`; the saved alert has **Undo**.
+Opening `FinTrack` shows the page in `dashboard/`, run by Scriptable in a web view (`lib/dashboard.js`) with every month, the rules and unrecognised messages handed in directly: no file picker, no network. Tabs: **Spending** (swipe the month pills, or **All YYYY** for the whole year with a bar per month; total, spend per category, latest transactions), **Insights** (a month against the one before), **Rules** (add, edit, reorder, delete, each with its match count) and **More** (add an SMS from the clipboard, unrecognised messages, update, version). The page cannot write files: it asks Scriptable (`fintrack://do?...`), which checks the request, does it and replies. Saving a rule sends the whole list, which Scriptable validates before writing `rules.json`; the saved alert has **Undo**.
 
 To work on it on a laptop, open `dashboard/preview.html` (fake data; requests are logged to the console).
 

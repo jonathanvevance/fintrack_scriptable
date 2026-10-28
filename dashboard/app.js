@@ -55,6 +55,8 @@
     unparsed: [],
     version: "",
     ym: null,
+    year: null, // "YYYY" when Spending shows a whole year instead of state.ym
+    today: null, // the month FinTrack was opened in
     tab: "spending",
     stack: [], // pushed screens: { type: "tx" | "list" | "rule" | "unparsed", ... }
     dialog: null,
@@ -67,6 +69,11 @@
     state.compiled = compileRules(rules);
   }
   const monthTx = (ym) => tagAll(state.compiled, state.months[ym] || []);
+  const yearMonths = (y) => Array.from({ length: 12 }, (_, i) => `${y}-${String(i + 1).padStart(2, "0")}`);
+  const hasMonth = (ym) => (state.months[ym] || []).length > 0;
+  // What Spending and its lists show: one month, or every month of state.year, newest first.
+  const periodTx = () => (state.year ? [].concat(...yearMonths(state.year).reverse().map(monthTx)) : monthTx(state.ym));
+  const periodLabel = () => state.year || monthLabel(state.ym);
   const allTx = () => [].concat(...Object.values(state.months));
   const top = () => state.stack[state.stack.length - 1];
   const findTx = (ym, id) => (state.months[ym] || []).find((t) => t.id === id);
@@ -115,9 +122,25 @@
       <div><i style="width:${(b / m) * 60}%;background:var(--fill)"></i>${esc(money(b))}<span class="muted small">${esc(labelB)}</span></div></div>`;
   }
 
-  function monthNav() {
-    return `<div class="nav"><button data-act="prev">‹ ${esc(monthName(shiftMonth(state.ym, -1)))}</button><span class="mid"></span>
-      <button class="end" data-act="next">${esc(monthName(shiftMonth(state.ym, 1)))} ›</button></div>`;
+  // Swipeable month pills grouped by year; Spending also gets an "All YYYY" pill per year.
+  function monthStrip(withYears) {
+    const yms = [...new Set([...Object.keys(state.months).filter(hasMonth), state.today, state.ym])].filter(Boolean).sort();
+    const html = [...new Set(yms.map((ym) => ym.slice(0, 4)))]
+      .map((y) => `<span class="yearlbl">${y}</span>` +
+        yms.filter((ym) => ym.startsWith(y))
+          .map((ym) => `<button class="pill ${ym === state.ym && !(withYears && state.year) ? "on" : ""}" data-act="month" data-ym="${ym}">${esc(monthName(ym))}</button>`).join("") +
+        (withYears ? `<button class="pill year ${state.year === y ? "on" : ""}" data-act="year" data-value="${y}">All ${y}</button>` : ""))
+      .join("");
+    return `<div class="strip">${html}</div>`;
+  }
+
+  // Money out per month of year y; tap a bar to open that month.
+  function yearBars(y) {
+    const yms = yearMonths(y);
+    const spent = yms.map((ym) => (totals(monthTx(ym)).INR || { out: 0 }).out);
+    const max = Math.max(1, ...spent);
+    return `<div class="bars">${yms.map((ym, i) => `<button data-act="month" data-ym="${ym}" ${hasMonth(ym) ? "" : "disabled"}>
+      <div class="b" style="height:${Math.max(2, (spent[i] / max) * 100)}%"></div><div class="l">${monthName(ym)[0]}</div></button>`).join("")}</div>`;
   }
 
   function backNav(title, end = "") {
@@ -138,34 +161,40 @@
   }
 
   function spendingView() {
-    const list = monthTx(state.ym);
-    const prev = monthTx(shiftMonth(state.ym, -1));
+    const list = periodTx();
     const t = totals(list);
     const spent = (t.INR || { out: 0 }).out;
-    const before = (totals(prev).INR || { out: 0 }).out;
-    const diff = spent - before;
-    const vs = before ? `${money(Math.abs(diff))} ${diff <= 0 ? "less" : "more"} than ${monthName(shiftMonth(state.ym, -1))}` : "";
+    let note;
+    if (state.year) {
+      const months = yearMonths(state.year).filter(hasMonth).length;
+      note = months ? `${money(Math.round(spent / months / 100) * 100)} a month on average · ${plural(months, "month")}` : "";
+    } else {
+      const before = (totals(monthTx(shiftMonth(state.ym, -1))).INR || { out: 0 }).out;
+      const diff = spent - before;
+      note = before ? `${money(Math.abs(diff))} ${diff <= 0 ? "less" : "more"} than ${monthName(shiftMonth(state.ym, -1))}` : "";
+    }
     const foreign = Object.keys(t).filter((c) => c !== "INR").map((c) => `${money(t[c].out, c)}`);
     const untagged = list.filter((tx) => !tx.category).length;
     const cats = categoryTotals(list);
 
-    return `${monthNav()}
-      <div class="large">Spending<small>${esc(monthLabel(state.ym))}</small></div>
+    return `<div class="large first">Spending<small>${esc(periodLabel())}</small></div>
+      ${monthStrip(true)}
       <div class="group pad" style="display:flex;align-items:center;gap:16px">${cats.length ? ring(cats) : ""}
-        <div style="min-width:0"><div class="muted">Spent in ${esc(monthName(state.ym))}</div>
+        <div style="min-width:0"><div class="muted">Spent in ${esc(state.year || monthName(state.ym))}</div>
           <div class="big">${esc(money(spent))}</div>
-          <div class="muted small">${esc([vs, foreign.length ? "also " + foreign.join(", ") : ""].filter(Boolean).join(" · ") || "\u00a0")}</div></div></div>
+          <div class="muted small">${esc([note, foreign.length ? "also " + foreign.join(", ") : ""].filter(Boolean).join(" · ") || "\u00a0")}</div></div></div>
+      ${state.year ? `<div class="group pad"><div class="muted small">Each month · tap one to open it</div>${yearBars(state.year)}</div>` : ""}
       ${cats.length ? `<div class="sh">Categories</div><div class="group">${categoryRows(list)}</div>` : ""}
       ${untagged ? `<button class="card attention" data-act="open-list" data-filter="untagged">${icon(null)}<div style="flex:1"><div style="font-weight:600">${plural(untagged, "transaction")} need a category</div>
         <div class="muted small">Tag one and choose Always; FinTrack remembers.</div></div><span class="chev"></span></button>` : ""}
       <div class="sh2">Latest ${list.length > 5 ? `<button data-act="open-list" data-filter="all">See All</button>` : ""}</div>
-      <div class="group">${list.slice(0, 5).map(txRow).join("") || `<div class="empty">No transactions in ${esc(monthLabel(state.ym))}</div>`}</div>`;
+      <div class="group">${list.slice(0, 5).map(txRow).join("") || `<div class="empty">No transactions in ${esc(periodLabel())}</div>`}</div>`;
   }
 
   function listView(screen) {
-    const list = monthTx(state.ym);
+    const list = periodTx();
     const shown = screen.filter === "all" ? list : screen.filter === "untagged" ? list.filter((t) => !t.category) : list.filter((t) => t.category === screen.filter);
-    const title = screen.filter === "all" ? monthLabel(state.ym) : screen.filter === "untagged" ? "Needs a Category" : screen.filter;
+    const title = screen.filter === "all" ? periodLabel() : screen.filter === "untagged" ? "Needs a Category" : screen.filter;
     return `${backNav(title)}<div style="height:8px"></div>
       <div class="group">${shown.map(txRow).join("") || `<div class="empty">Nothing here</div>`}</div>`;
   }
@@ -235,7 +264,7 @@
 
   function moreView() {
     const review = state.unparsed.length + toCheck().length;
-    return `<div style="height:44px"></div><div class="large">More</div>
+    return `<div class="large first">More</div>
       <div class="sh">Add</div>
       <div class="group"><button class="li plain" data-act="paste-sms"><span class="link">Add SMS from Clipboard</span></button></div>
       <div class="sf">Copy a bank SMS in Messages first. It is saved the same way the automation would.</div>
@@ -298,7 +327,7 @@
         <div class="muted small">Insights get better as more is tagged.</div></div><span class="chev"></span></button>`);
     }
 
-    return `${monthNav()}<div class="large">Insights<small>${esc(monthLabel(state.ym))} compared with ${esc(monthLabel(prevYm))}</small></div>${cards.join("")}`;
+    return `<div class="large first">Insights<small>${esc(monthLabel(state.ym))} compared with ${esc(monthLabel(prevYm))}</small></div>${monthStrip(false)}${cards.join("")}`;
   }
 
   // ---- Rules (Shortcuts-style sentences) ----
@@ -483,7 +512,10 @@
     const options = state.pendingAction || {};
     state.pendingAction = null;
     if (result.data) useData(result.data);
-    if (result.ym) state.ym = result.ym;
+    if (result.ym) {
+      state.ym = result.ym;
+      state.year = null;
+    }
     if (result.ok && options.pop) state.stack.pop();
     showDialog(result.title || (result.ok ? "Done" : "Something went wrong"), result.message || "");
   }
@@ -545,6 +577,9 @@
     const tabs = screen ? "" : `<nav class="tabbar">${["spending", "insights", "rules", "more"]
       .map((id) => `<button data-act="tab" data-value="${id}" class="${state.tab === id ? "on" : ""}">${TAB_ICONS[id]}${id[0].toUpperCase() + id.slice(1)}</button>`).join("")}</nav>`;
     app.innerHTML = `<div class="screen ${screen ? "no-tabs" : ""}">${body}</div>${tabs}${dialogView()}`;
+    const strip = app.querySelector(".strip");
+    const on = strip && strip.querySelector(".on");
+    if (on) strip.scrollLeft = on.offsetLeft - (strip.clientWidth - on.offsetWidth) / 2;
   }
 
   function push(screen) {
@@ -559,8 +594,8 @@
 
   const actions = {
     tab: (el) => { state.tab = el.dataset.value; state.stack = []; render(); window.scrollTo(0, 0); },
-    prev: () => { state.ym = shiftMonth(state.ym, -1); render(); },
-    next: () => { state.ym = shiftMonth(state.ym, 1); render(); },
+    month: (el) => { state.ym = el.dataset.ym; state.year = null; render(); },
+    year: (el) => { state.year = el.dataset.value; render(); },
     back,
     "open-list": (el) => push({ type: "list", filter: el.dataset.filter }),
     "open-tx": (el) => {
@@ -632,6 +667,7 @@
   function load(data) {
     useData(data);
     state.ym = data.currentMonth || Object.keys(state.months).sort().pop() || "2026-01";
+    state.today = state.ym;
     render();
   }
 

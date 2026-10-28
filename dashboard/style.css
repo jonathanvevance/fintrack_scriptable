@@ -26,6 +26,7 @@ input::placeholder { color: var(--sec); }
 .nav > * { flex: 1; } .nav .mid { text-align: center; font-weight: 600; white-space: nowrap; } .nav .end { text-align: right; }
 .nav button { color: var(--blue); }
 .large { font-size: 34px; font-weight: 700; letter-spacing: .3px; padding: 2px 16px 10px; }
+.large.first { padding-top: 12px; }
 .large small { display: block; font-size: 15px; font-weight: 400; letter-spacing: 0; color: var(--sec); margin-top: 2px; }
 
 /* Grouped lists and cards */
@@ -105,3 +106,17 @@ input::placeholder { color: var(--sec); }
 .alert .acts button { flex: 1; padding: 11px; color: var(--blue); text-align: center; }
 .alert .acts button + button { border-left: .5px solid var(--sep); font-weight: 600; }
 .alert .acts button.danger { color: var(--red); }
+
+/* Month strip and year bars */
+.strip { position: relative; display: flex; align-items: center; gap: 8px; overflow-x: auto; padding: 4px 16px 18px; scrollbar-width: none; }
+.strip::-webkit-scrollbar { display: none; }
+.yearlbl { flex: none; color: var(--sec); font-size: 13px; font-weight: 600; padding: 0 2px 0 6px; }
+.yearlbl:first-child { padding-left: 0; }
+.pill { flex: none; height: 40px; padding: 0 16px; border-radius: 20px; background: var(--card); font-size: 17px; font-weight: 600; }
+.pill.year { background: none; box-shadow: inset 0 0 0 1.5px var(--sep); }
+.pill.on, .pill.year.on { background: var(--text); color: var(--bg); box-shadow: none; }
+.bars { display: flex; align-items: flex-end; gap: 6px; height: 130px; margin-top: 14px; }
+.bars button { flex: 1; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 6px; }
+.bars .b { width: 100%; border-radius: 5px; background: var(--blue); }
+.bars button[disabled] .b { background: var(--fill); }
+.bars .l { font-size: 11px; color: var(--sec); }
