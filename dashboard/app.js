@@ -27,61 +27,67 @@
   // ---- Category look: saved in categories.json, else suggested from the name ----
 
   // First keyword found in the lower-cased name wins, so more specific words come first.
+  // [keywords, colour, emojis]: the first emoji is the suggested icon, the rest are offered beside it.
   const SUGGEST = [
-    [["coffee", "cafe"], "#a2845e", "☕️"],
-    [["food", "dining", "restaurant", "swiggy", "zomato", "lunch", "dinner"], "#ff9500", "🍜"],
-    [["grocer", "vegetable", "fruit", "bigbasket", "blinkit", "zepto"], "#34c759", "🥦"],
-    [["snack"], "#ff9500", "🍿"],
-    [["cloth", "fashion", "apparel"], "#af52de", "👕"],
-    [["shop", "amazon", "flipkart"], "#af52de", "🛍️"],
-    [["flight", "travel", "trip", "holiday", "vacation"], "#007aff", "✈️"],
-    [["hotel", "stay"], "#007aff", "🏨"],
-    [["fuel", "petrol", "diesel"], "#ffcc00", "⛽️"],
-    [["taxi", "cab", "uber", "ola", "auto", "transport", "commute", "metro"], "#007aff", "🚕"],
-    [["parking", "toll"], "#8e8e93", "🅿️"],
-    [["recharge", "mobile", "phone", "prepaid", "postpaid"], "#007aff", "📱"],
-    [["internet", "broadband", "wifi"], "#5ac8fa", "🌐"],
-    [["electric", "power"], "#ffcc00", "💡"],
-    [["water"], "#5ac8fa", "🚰"],
-    [["gas", "lpg", "cylinder"], "#ff9500", "🔥"],
-    [["rent", "house", "home"], "#ff2d55", "🏠"],
-    [["bill", "utilit"], "#ff3b30", "🧾"],
-    [["maint", "repair"], "#8e8e93", "🔧"],
-    [["subscri", "netflix", "spotify", "prime"], "#5856d6", "📺"],
-    [["movie", "entertain", "game"], "#ff375f", "🎬"],
-    [["health", "medic", "doctor", "pharma", "hospital"], "#ff2d55", "💊"],
-    [["gym", "fitness", "sport"], "#34c759", "🏋️"],
-    [["beauty", "salon", "spa", "groom"], "#ff2d55", "💇"],
-    [["school", "educat", "course", "book", "fees"], "#5ac8fa", "📚"],
-    [["kid", "baby", "child"], "#ff9500", "🧸"],
-    [["pet"], "#a2845e", "🐾"],
-    [["family", "parent"], "#ff9500", "👪"],
-    [["gift"], "#ff2d55", "🎁"],
-    [["donat", "charit"], "#34c759", "🤲"],
-    [["insur"], "#30b0c7", "🛡️"],
-    [["loan", "emi"], "#8e8e93", "🏦"],
-    [["card"], "#8e8e93", "💳"],
-    [["invest", "sip", "mutual", "stock"], "#34c759", "📈"],
-    [["saving"], "#34c759", "🐷"],
-    [["salary", "income"], "#34c759", "💼"],
-    [["cashback", "reward"], "#30b0c7", "💸"],
-    [["refund"], "#30b0c7", "↩️"],
-    [["transfer", "upi"], "#8e8e93", "↔︎"],
-    [["cash", "atm"], "#34c759", "💵"],
-    [["test"], "#8e8e93", "🧪"],
+    [["coffee", "cafe"], "#a2845e", ["☕️", "🫖", "🧋", "🥐"]],
+    [["food", "dining", "restaurant", "swiggy", "zomato", "lunch", "dinner"], "#ff9500", ["🍜", "🍕", "🍔", "🍛", "🥡", "🍽️"]],
+    [["grocer", "vegetable", "fruit", "bigbasket", "blinkit", "zepto"], "#34c759", ["🥦", "🛒", "🍎", "🥕", "🥛", "🧺"]],
+    [["snack"], "#ff9500", ["🍿", "🍪", "🍫", "🥨"]],
+    [["cloth", "fashion", "apparel"], "#af52de", ["👕", "👗", "👟", "👜"]],
+    [["shop", "amazon", "flipkart"], "#af52de", ["🛍️", "📦", "🛒", "🏬"]],
+    [["flight", "travel", "trip", "holiday", "vacation"], "#007aff", ["✈️", "🧳", "🏖️", "🗺️", "🚆"]],
+    [["hotel", "stay"], "#007aff", ["🏨", "🛏️", "🏕️"]],
+    [["fuel", "petrol", "diesel"], "#ffcc00", ["⛽️", "🚗", "🛵"]],
+    [["taxi", "cab", "uber", "ola", "auto", "transport", "commute", "metro"], "#007aff", ["🚕", "🛺", "🚇", "🚌", "🚗", "🛵"]],
+    [["parking", "toll"], "#8e8e93", ["🅿️", "🚗", "🛣️"]],
+    [["recharge", "mobile", "phone", "prepaid", "postpaid"], "#007aff", ["📱", "📶", "☎️"]],
+    [["internet", "broadband", "wifi"], "#5ac8fa", ["🌐", "📶", "💻"]],
+    [["electric", "power"], "#ffcc00", ["💡", "⚡️", "🔌"]],
+    [["water"], "#5ac8fa", ["🚰", "💧", "🚿"]],
+    [["gas", "lpg", "cylinder"], "#ff9500", ["🔥", "🍳"]],
+    [["rent", "house", "home"], "#ff2d55", ["🏠", "🏡", "🔑", "🛋️"]],
+    [["bill", "utilit"], "#ff3b30", ["🧾", "💡", "📄"]],
+    [["maint", "repair"], "#8e8e93", ["🔧", "🛠️", "🧰", "🪛"]],
+    [["subscri", "netflix", "spotify", "prime"], "#5856d6", ["📺", "🎵", "🎧", "🔁"]],
+    [["movie", "entertain", "game"], "#ff375f", ["🎬", "🍿", "🎮", "🎟️", "🎭"]],
+    [["health", "medic", "doctor", "pharma", "hospital"], "#ff2d55", ["💊", "🩺", "🏥", "🦷", "❤️‍🩹"]],
+    [["gym", "fitness", "sport"], "#34c759", ["🏋️", "🏃", "🧘", "⚽️", "🏸"]],
+    [["beauty", "salon", "spa", "groom"], "#ff2d55", ["💇", "💅", "💄", "🧴"]],
+    [["school", "educat", "course", "book", "fees"], "#5ac8fa", ["📚", "🎓", "✏️", "🏫"]],
+    [["kid", "baby", "child"], "#ff9500", ["🧸", "👶", "🍼", "🎒"]],
+    [["pet"], "#a2845e", ["🐾", "🐶", "🐱", "🦴", "🐟"]],
+    [["family", "parent"], "#ff9500", ["👪", "❤️", "🏠"]],
+    [["gift"], "#ff2d55", ["🎁", "🎉", "💐", "🎂"]],
+    [["donat", "charit"], "#34c759", ["🤲", "❤️", "🙏"]],
+    [["insur"], "#30b0c7", ["🛡️", "☂️", "📄"]],
+    [["loan", "emi"], "#8e8e93", ["🏦", "📆", "💰"]],
+    [["card"], "#8e8e93", ["💳", "🏦"]],
+    [["invest", "sip", "mutual", "stock"], "#34c759", ["📈", "💹", "🪙", "🏦"]],
+    [["saving"], "#34c759", ["🐷", "💰", "🏦"]],
+    [["salary", "income"], "#34c759", ["💼", "💰", "🏢"]],
+    [["cashback", "reward"], "#30b0c7", ["💸", "🎁", "⭐️"]],
+    [["refund"], "#30b0c7", ["↩️", "💸"]],
+    [["interest"], "#34c759", ["💰", "📈", "🏦"]],
+    [["receiv"], "#34c759", ["📥", "💰", "💵"]],
+    [["transfer", "upi"], "#8e8e93", ["↔︎", "🔁", "🏦"]],
+    [["cash", "atm"], "#34c759", ["💵", "🏧", "💰"]],
+    [["test"], "#8e8e93", ["🧪"]],
   ];
   const PALETTE = ["#ff9500", "#34c759", "#af52de", "#007aff", "#5856d6", "#ff2d55", "#30b0c7", "#a2845e", "#5ac8fa", "#ff3b30", "#ffcc00", "#8e8e93"];
-  const EMOJIS = ["🍜", "🥦", "☕️", "🍿", "🛍️", "👕", "✈️", "🚕", "⛽️", "📱", "🌐", "💡", "🧾", "🏠", "🔧", "📺",
-    "🎬", "💊", "🏋️", "💇", "📚", "🧸", "🐾", "👪", "🎁", "🛡️", "🏦", "💳", "📈", "💼", "💸", "↔︎", "💵", "🧪", "🏷️", "⭐️"];
+  const DEFAULT_EMOJI = "🏷️";
   const UNTAGGED = ["#aeaeb2", "?"];
 
-  function suggestLook(name) {
+  function suggestedGroup(name) {
     const lower = name.toLowerCase();
-    const hit = SUGGEST.find(([words]) => words.some((w) => lower.includes(w)));
-    if (hit) return [hit[1], hit[2]];
+    return SUGGEST.find(([words]) => words.some((w) => lower.includes(w)));
+  }
+
+  function suggestLook(name) {
+    const hit = suggestedGroup(name);
+    if (hit) return [hit[1], hit[2][0]];
     let h = 0;
     for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) | 0;
-    return [PALETTE[Math.abs(h) % PALETTE.length], "🏷️"];
+    return [PALETTE[Math.abs(h) % PALETTE.length], DEFAULT_EMOJI];
   }
 
   // [colour, emoji]. A look being picked on the current screen shows before it is saved.
@@ -102,10 +108,32 @@
     return { name, emoji, colour: c };
   };
 
-  function lookPicker(newLook) {
-    const emojis = EMOJIS.map((e) => `<button data-act="pick-emoji" data-value="${e}" style="${e === newLook.emoji ? `background:${newLook.colour}` : ""}">${e}</button>`).join("");
+  // The first emoji in what was typed, whole: a flag, a skin tone or a family counts as one.
+  const EMOJI = /\p{Regional_Indicator}{2}|\p{Extended_Pictographic}(?:\uFE0F|[\u{1F3FB}-\u{1F3FF}]|\u200D\p{Extended_Pictographic}\uFE0F?)*/u;
+  function firstEmoji(text) {
+    const m = (text || "").match(EMOJI);
+    return m ? m[0] : null;
+  }
+
+  // Icons that fit the name, then icons other categories already use, then any emoji from the keyboard.
+  // The icon picked last is always shown, even when it came from the keyboard.
+  function lookPicker(newLook, name, emojiOpen) {
+    const typed = (name || "").trim();
+    const group = typed ? suggestedGroup(typed) : null;
+    const forName = group ? group[2].slice() : [];
+    const used = [...new Set(categoryUsage().map((u) => look(u.name)[1]))].filter((e) => e !== "?" && !forName.includes(e)).slice(0, 12);
+    const rows = [forName.length ? [`For “${esc(typed)}”`, forName] : null, used.length ? ["Used by your categories", used] : null].filter(Boolean);
+    if (!rows.some(([, list]) => list.includes(newLook.emoji))) {
+      if (rows.length) rows[0][1].unshift(newLook.emoji);
+      else rows.push(["Picked", [newLook.emoji]]);
+    }
+    const button = (e) => `<button data-act="pick-emoji" data-value="${e}" style="${e === newLook.emoji ? `background:${newLook.colour}` : ""}">${e}</button>`;
+    const lists = rows.map(([label, list]) => `<div class="emoji-label">${label}</div><div class="emojis">${list.map(button).join("")}</div>`).join("");
+    const any = emojiOpen
+      ? `<input data-field="emojiInput" class="emoji-input" placeholder="Tap 😀 on the keyboard, pick one" autocomplete="off">`
+      : `<button class="any-emoji" data-act="any-emoji">😀 Any emoji…</button>`;
     const swatches = PALETTE.map((c) => `<button data-act="pick-colour" data-value="${c}" class="${c === newLook.colour ? "on" : ""}" style="background:${c}"></button>`).join("");
-    return `<div class="sh">Icon${newLook.name ? " for " + esc(newLook.name) : ""}</div><div class="group pad"><div class="emojis">${emojis}</div><div class="swatches">${swatches}</div></div>`;
+    return `<div id="look-picker"><div class="sh">Icon</div><div class="group pad">${lists}${any}<div class="swatches">${swatches}</div></div></div>`;
   }
 
   // ---- State ----
@@ -848,17 +876,17 @@
     const nav = backNav("", `<button data-act="save-category"><b>${isNew ? "Save" : "Done"}</b></button>`);
     if (isNew) {
       return `${nav}${head}<div class="muted small">An icon is suggested from the name; pick another if you like.</div></div>
-        <div class="group">${nameRow}</div>${lookPicker(lk)}`;
+        <div class="group">${nameRow}</div>${lookPicker(lk, screen.nameInput, screen.emojiOpen)}`;
     }
     const u = usageOf(screen.name);
     const txs = allTx();
-    const cards = state.rules.map((rule, i) => (rule.set && rule.set.category === screen.name ? ruleCard(rule, i, txs) : "")).join("");
+    const cards = state.rules.map((rule, i) => (rule.set && rule.set.category === screen.name ? ruleCard(i, i, txs) : "")).join("");
     const others = categoryUsage().length > 1;
     return `${nav}${head}<div class="muted">${esc(plural(u.tx, "transaction"))}${u.paise ? ` · ${esc(money(u.paise))} in ${esc(monthName(state.ym))}` : ""}</div></div>
       <div class="group">${nameRow}
         <button class="li plain" data-act="toggle-look"><div class="main"><div class="t1">Icon &amp; Colour</div></div>
           <span class="val">${lk.emoji} <i class="swatch" style="background:${lk.colour}"></i></span><span class="chev ${screen.showLook ? "open" : ""}"></span></button></div>
-      ${screen.showLook ? lookPicker(lk) : ""}
+      ${screen.showLook ? lookPicker(lk, screen.nameInput, screen.emojiOpen) : ""}
       <div class="sh">Rules that set ${esc(screen.name)}</div>
       ${cards}
       <div class="group"><button class="li plain" data-act="new-rule" data-category="${esc(screen.name)}"><span class="link">Add Rule for ${esc(screen.name)}</span></button></div>
@@ -1229,13 +1257,19 @@
       push({ type: "tx", ym: el.dataset.ym, id: tx.id, draft: tx.category, always: false });
     },
     "pick-cat": (el) => { top().draft = el.dataset.value; render(); },
-    "pick-emoji": (el) => { top().newLook.emoji = el.dataset.value; top().lookTouched = true; render(); },
+    "pick-emoji": (el) => { top().newLook.emoji = el.dataset.value; top().lookTouched = true; top().emojiOpen = false; render(); },
+    "any-emoji": () => {
+      top().emojiOpen = true;
+      render();
+      const box = app.querySelector('[data-field="emojiInput"]');
+      if (box) box.focus();
+    },
     "pick-colour": (el) => { top().newLook.colour = el.dataset.value; top().lookTouched = true; render(); },
     "open-categories": () => push({ type: "categories" }),
     "open-category": (el) => push({ type: "category", name: el.dataset.value, nameInput: el.dataset.value, newLook: null, showLook: false }),
     "new-category": () => {
       if (top() && top().type === "rule") top().sheet = null;
-      push({ type: "category", name: null, nameInput: "", newLook: { name: "", emoji: "🏷️", colour: "#8e8e93" }, showLook: true, lookTouched: false });
+      push({ type: "category", name: null, nameInput: "", newLook: { name: "", emoji: DEFAULT_EMOJI, colour: "#8e8e93" }, showLook: true, lookTouched: false });
     },
     "toggle-look": () => {
       const s = top();
@@ -1457,7 +1491,32 @@
     const name = e.target.dataset && e.target.dataset.field;
     const screen = top();
     if (!name || !screen) return;
+    if (screen.type === "category" && name === "emojiInput") {
+      const emoji = firstEmoji(e.target.value);
+      if (!emoji) return;
+      screen.newLook = { ...(screen.newLook || startLook(screen.name)), emoji };
+      screen.lookTouched = true;
+      screen.emojiOpen = false;
+      return render();
+    }
     if (screen.type === "category" || screen.type === "add-bank") screen[name] = e.target.value;
+    // The picker's "For <name>" icons follow the name as it is typed, without redrawing the name box.
+    if (screen.type === "category" && name === "nameInput") {
+      if (screen.name == null && !screen.lookTouched) {
+        const typed = screen.nameInput.trim();
+        const [c, emoji] = typed ? suggestLook(typed) : ["#8e8e93", DEFAULT_EMOJI];
+        screen.newLook = { name: typed, emoji, colour: c };
+        const head = app.querySelector(".ic.xl");
+        if (head) {
+          head.style.background = c;
+          head.textContent = emoji;
+          head.nextElementSibling.textContent = typed || "New Category";
+        }
+      }
+      const picker = document.getElementById("look-picker");
+      const lk = screen.newLook || startLook(screen.name);
+      if (picker) picker.outerHTML = lookPicker(lk, screen.nameInput, screen.emojiOpen);
+    }
     if (screen.type === "account") {
       if (name === "upiInput" || name === "payeeInput") screen[name] = e.target.value;
       else screen.draft[name] = e.target.value;
@@ -1477,7 +1536,7 @@
     const screen = top();
     if (!screen || screen.type !== "category" || screen.name != null || screen.lookTouched) return;
     const name = screen.nameInput.trim();
-    const [c, emoji] = name ? suggestLook(name) : ["#8e8e93", "🏷️"];
+    const [c, emoji] = name ? suggestLook(name) : ["#8e8e93", DEFAULT_EMOJI];
     screen.newLook = { name, emoji, colour: c };
     render();
   });
