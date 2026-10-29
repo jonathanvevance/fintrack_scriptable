@@ -130,6 +130,7 @@
     trendMonths: 12,
     bubble: null, // recipient picked in the Recipients bubbles
     stack: [], // pushed screens: { type: "tx" | "list" | "rule" | "unparsed", ... }
+    reorder: null, // while reordering the Rules list: rule indexes in their new order
     dialog: null,
     pending: null, // a save waiting for Scriptable's reply
     pendingAction: null, // options for any other request waiting for a reply
@@ -265,6 +266,7 @@
     if (tab !== state.tab) state.tabHistory = [...state.tabHistory, state.tab].slice(-10);
     state.tab = tab;
     state.stack = [];
+    state.reorder = null;
   }
   // Top-left of a tab: back to the tab you came from, so the spot under Scriptable's Close is ours.
   function tabBack() {
@@ -793,18 +795,29 @@
     }).join("");
   }
 
-  function ruleCard(rule, i, txs) {
+  function ruleCard(i, position, txs) {
     const hits = txs.filter(state.compiled[i].matches).length;
-    return `<button class="sentence" data-act="edit-rule" data-i="${i}"><div class="lbl"><span>${plural(hits, "transaction")}</span><span>${i + 1}</span></div>${sentence(rule)}</button>`;
+    const lbl = `<div class="lbl"><span>${plural(hits, "transaction")}</span><span class="pos">${position + 1}</span></div>`;
+    if (state.reorder) return `<div class="sentence moving" data-i="${i}"><div class="body">${lbl}${sentence(state.rules[i])}</div><span class="grip">≡</span></div>`;
+    return `<button class="sentence" data-act="edit-rule" data-i="${i}">${lbl}${sentence(state.rules[i])}</button>`;
   }
+
+  const REORDER_ICON = '<svg viewBox="0 0 24 24"><path d="M7 9.5 12 5l5 4.5"/><path d="M7 14.5 12 19l5-4.5"/></svg>';
 
   function rulesView() {
     const txs = allTx();
-    const cards = state.rules.map((rule, i) => ruleCard(rule, i, txs)).join("");
+    const reorder = state.reorder;
+    const order = reorder || state.rules.map((_, i) => i);
+    const cards = order.map((i, position) => ruleCard(i, position, txs)).join("");
     const used = categoryUsage();
     const glyphs = used.slice(0, 7).map((u) => look(u.name)[1]).join(" ") + (used.length > 7 ? ` +${used.length - 7}` : "");
-    return `<div class="nav">${tabBack()}<span class="mid"></span><button class="end" data-act="new-rule" style="font-size:26px;line-height:1">＋</button></div>
-      <div class="large">Rules<small>Checked top to bottom. The first rule that matches sets the category.</small></div>
+    const reorderButton = state.rules.length > 1 ? `<button class="reorder ${reorder ? "on" : ""}" data-act="reorder" aria-label="Reorder">${REORDER_ICON}</button>` : "";
+    const end = reorder ? reorderButton : `${reorderButton}<button data-act="new-rule" class="plus">＋</button>`;
+    const hint = reorder
+      ? `<small class="live">Drag ≡ to change the order. Tap <span class="inline-icon">${REORDER_ICON}</span> again to save.</small>`
+      : "<small>Checked top to bottom. The first rule that matches sets the category.</small>";
+    return `<div class="nav">${reorder ? `<button data-act="reorder-cancel">Cancel</button>` : tabBack()}<span class="mid"></span><span class="end rules-end">${end}</span></div>
+      <div class="large">Rules${hint}</div>
       <div class="group"><button class="li" data-act="open-categories"><span class="ic" style="background:#ff9500">🏷️</span>
         <div class="main"><div class="t1">Categories</div><div class="t2">${esc(glyphs || "None yet")}</div></div><span class="val">${used.length}</span><span class="chev"></span></button></div>
       <div class="sh">Rules</div>
@@ -1267,6 +1280,18 @@
     "toggle-always": () => { top().always = !top().always; render(); },
     "save-tx": () => saveTx(top()),
     "new-rule": (el) => push({ type: "rule", index: null, ...fieldsFromRule(el.dataset.category ? { set: { category: el.dataset.category } } : {}) }),
+    reorder: () => {
+      const order = state.reorder;
+      if (!order) {
+        state.reorder = state.rules.map((_, i) => i);
+        return render();
+      }
+      state.reorder = null;
+      if (order.every((i, position) => i === position)) return render();
+      render();
+      commit({ rules: order.map((i) => state.rules[i]) }, "Order saved", "Rules are now checked in the new order.");
+    },
+    "reorder-cancel": () => { state.reorder = null; render(); },
     "edit-rule": (el) => { const i = Number(el.dataset.i); push({ type: "rule", index: i, ...fieldsFromRule(state.rules[i]) }); },
     dir: (el) => { top().fields.direction = el.dataset.value; top().sheet = null; render(); },
     "rule-cat": (el) => { top().fields.category = el.dataset.value; top().sheet = null; render(); },
@@ -1391,6 +1416,51 @@
   app.addEventListener("click", (e) => {
     const el = e.target.closest("[data-act]");
     if (el && actions[el.dataset.act]) actions[el.dataset.act](el);
+  });
+
+  // Reordering rules: a card follows the finger by its ≡ and swaps places with a neighbour once
+  // it passes that neighbour's middle. The order is kept in state.reorder when the finger lifts.
+  app.addEventListener("pointerdown", (e) => {
+    const grip = e.target.closest(".grip");
+    if (!grip || !state.reorder) return;
+    e.preventDefault();
+    const card = grip.closest(".sentence");
+    const list = card.parentElement;
+    const gap = parseFloat(getComputedStyle(card).marginBottom) || 0;
+    let lastY = e.clientY;
+    let lastScroll = window.scrollY;
+    let offset = 0;
+    card.classList.add("lifted");
+    const move = (ev) => {
+      offset += ev.clientY - lastY + window.scrollY - lastScroll;
+      lastY = ev.clientY;
+      lastScroll = window.scrollY;
+      const prev = card.previousElementSibling;
+      const next = card.nextElementSibling;
+      const centre = card.offsetTop + offset + card.offsetHeight / 2;
+      if (prev && prev.classList.contains("moving") && centre < prev.offsetTop + prev.offsetHeight / 2) {
+        list.insertBefore(card, prev);
+        offset += prev.offsetHeight + gap;
+      } else if (next && next.classList.contains("moving") && centre > next.offsetTop + next.offsetHeight / 2) {
+        list.insertBefore(next, card);
+        offset -= next.offsetHeight + gap;
+      }
+      card.style.transform = `translateY(${offset}px)`;
+      list.querySelectorAll(".pos").forEach((pos, position) => { pos.textContent = position + 1; });
+      if (ev.clientY > window.innerHeight - 90) window.scrollBy(0, 8);
+      else if (ev.clientY < 110) window.scrollBy(0, -8);
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      card.classList.remove("lifted");
+      card.style.transform = "";
+      if (state.reorder) state.reorder = [...list.querySelectorAll(".moving")].map((c) => Number(c.dataset.i));
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
   });
 
   app.addEventListener("input", (e) => {

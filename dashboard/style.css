@@ -82,6 +82,17 @@ input::placeholder { color: var(--sec); }
 /* Rules as sentences */
 .sentence { display: block; width: calc(100% - 32px); background: var(--card); border-radius: 14px; margin: 0 16px 10px; padding: 12px 16px; line-height: 2; }
 .sentence .lbl { font-size: 12px; color: var(--sec); text-transform: uppercase; letter-spacing: .3px; line-height: 1.2; margin-bottom: 4px; display: flex; justify-content: space-between; }
+.sentence.moving { display: flex; align-items: center; gap: 10px; position: relative; }
+.sentence.moving .body { flex: 1; min-width: 0; }
+.sentence.lifted { z-index: 3; box-shadow: 0 12px 30px rgba(0,0,0,.22); }
+.grip { flex: 0 0 auto; align-self: stretch; display: flex; align-items: center; padding: 0 2px 0 8px; font-size: 22px; color: var(--sec); touch-action: none; -webkit-user-select: none; user-select: none; }
+.nav .rules-end { display: flex; justify-content: flex-end; align-items: center; gap: 18px; }
+.nav .plus { font-size: 26px; line-height: 1; }
+.nav .reorder { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 16px; }
+.nav .reorder.on { background: var(--blue); color: #fff; }
+.reorder svg, .inline-icon svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.1; stroke-linecap: round; stroke-linejoin: round; }
+.inline-icon svg { width: 14px; height: 14px; vertical-align: -2px; }
+.large small.live { color: var(--blue); }
 .tok { display: inline-block; padding: 1px 9px; border-radius: 8px; font-weight: 600; line-height: 1.6; background: color-mix(in srgb, var(--c) 16%, transparent); color: var(--c); }
 
 /* Tab bar */
