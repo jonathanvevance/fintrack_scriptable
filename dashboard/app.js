@@ -173,8 +173,11 @@
     state.isSelf = compileAccounts(banks);
   }
   // Tagged copies for display. A self transfer gets `self` (why) and no category.
+  // `manual.selfTransfer` marks only this transaction; account matching handles the usual cases.
   const tag = (list) => tagAll(state.compiled, list).map((tx) => {
-    const self = state.isSelf(tx);
+    const self = tx.manual && tx.manual.selfTransfer
+      ? { kind: "manual", match: "", label: "" }
+      : state.isSelf(tx);
     return self ? { ...tx, self, category: null } : tx;
   });
   // What totals, categories and Insights count: everything except self transfers.
@@ -246,7 +249,9 @@
 
   // ---- Shared pieces ----
 
-  const selfIcon = (cls = "") => `<span class="ic ${cls}" style="background:#8e8e93">↔︎</span>`;
+  const SELF_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="8" height="6" rx="1.5"/>
+    <rect x="13" y="14" width="8" height="6" rx="1.5"/><path d="M13 6h5l-2-2m2 2-2 2M11 18H6l2 2m-2-2 2-2"/></svg>`;
+  const selfIcon = (cls = "") => `<span class="ic self-icon ${cls}" style="background:#8e8e93">${SELF_ICON}</span>`;
 
   function txRow(tx) {
     const sub = tx.self ? "Self transfer" : tx.category ? esc(tx.category) : `<span class="warn">Needs a category</span>`;
@@ -400,6 +405,7 @@
   function selfView(tx) {
     const { kind, match, label } = tx.self;
     const why = {
+      manual: "you marked this transaction by hand.",
       upi: `<b>${esc(match)}</b> is your ${esc(label)}.`,
       name: `<b>${esc(match)}</b> is how your ${esc(label)} shows when paid.`,
       neft: `<b>${esc(match)}</b> is your ${esc(label)}.`,
@@ -407,10 +413,18 @@
       card: `it pays ${label ? `your <b>${esc(label)}</b>` : "your card"} bill.`,
     }[kind];
     return `${backNav("")}${txHead(tx, selfIcon("xl"))}
-      <div class="group"><div class="li plain"><div class="main"><div class="t1">Kind</div></div><span class="val">↔︎ Self Transfer</span></div></div>
+      <div class="group"><div class="li plain"><div class="main"><div class="t1">Kind</div></div><span class="val">Self Transfer</span></div></div>
       <div class="sf" style="margin-top:-12px">Not counted as spending or money received: ${why}</div>
-      <div class="group"><button class="li plain" data-act="open-accounts"><span class="link">Open My Accounts</span></button></div>
+      ${kind === "manual"
+        ? `<div class="group"><button class="li plain" data-act="unmark-self"><span class="link">Change to Payment</span></button></div>`
+        : `<div class="group"><button class="li plain" data-act="open-accounts"><span class="link">Open My Accounts</span></button></div>`}
       ${txMessage(tx)}`;
+  }
+
+  function txMenu() {
+    return `<button class="tx-menu-dim" data-act="close-tx-menu" aria-label="Close menu"></button>
+      <div class="tx-menu"><button data-act="mark-self">Mark as Self Transfer</button>
+        <button data-act="close-tx-menu" class="muted">Cancel</button></div>`;
   }
 
   function txView(screen) {
@@ -422,14 +436,30 @@
       .map((name) => `<button class="li" data-act="pick-cat" data-value="${esc(name)}">${icon(name, "sq")}<div class="main"><div class="t1">${esc(name)}</div></div>${screen.draft === name ? `<span class="check">✓</span>` : ""}</button>`)
       .join("");
     const sameMerchant = tx.merchant ? allTx().filter((t) => t.merchant === tx.merchant).length : 0;
-    return `${backNav("", `<button data-act="save-tx"><b>Save</b></button>`)}
+    return `${backNav("", `<span class="tx-actions"><button data-act="tx-menu" aria-label="More transaction actions">•••</button><button data-act="save-tx"><b>Save</b></button></span>`)}
       ${txHead(tx, icon(screen.draft, "xl"))}
       <div class="sh">Category</div>
       <div class="group">${rows}
         <button class="li plain" data-act="open-categories"><span class="link">Manage Categories…</span></button></div>
       ${tx.merchant ? `<div class="group"><button class="li plain" data-act="toggle-always"><div class="main"><div class="t1" style="white-space:normal">Always put ${esc(shortName(tx.merchant))} in ${esc(screen.draft || "…")}</div>
           <div class="t2">Applies to ${plural(sameMerchant, "transaction")} now and every future one</div></div><span class="toggle ${screen.always ? "on" : ""}"></span></button></div>` : ""}
-      ${txMessage(tx)}`;
+      ${txMessage(tx)}${screen.txMenu ? txMenu() : ""}`;
+  }
+
+  function setManualSelf(isSelfTransfer) {
+    const screen = top();
+    const tx = findTx(screen.ym, screen.id);
+    const manual = { ...(tx.manual || {}) };
+    if (isSelfTransfer) manual.selfTransfer = true;
+    else delete manual.selfTransfer;
+    state.dialog = null;
+    screen.txMenu = false;
+    commit(
+      { manual: { ym: screen.ym, id: tx.id, manual } },
+      isSelfTransfer ? "Marked as Self Transfer" : "Changed to Payment",
+      isSelfTransfer ? "This transaction will not count as spending or money received." : "This transaction will count normally again.",
+      { detailOnly: true },
+    );
   }
 
   function saveTx(screen) {
@@ -1142,10 +1172,12 @@
     if (p.isUndo && p.payload.accounts) state.stack = state.stack.slice(0, state.stack.findIndex((s) => s.type === "accounts") + 1);
     if (p.after) p.after();
     if (!p.quiet) {
-      const selfCount = txs.filter((tx) => state.isSelf(tx)).length;
+      const selfCount = tag(txs).filter((tx) => tx.self).length;
       state.dialog = {
         title: p.title,
-        text: `${p.detail}\n${p.payload.accounts ? `${plural(selfCount, "self transfer")} across all your transactions.` : `${plural(changed, "transaction")} changed category.`}`,
+        text: p.detailOnly
+          ? p.detail
+          : `${p.detail}\n${p.payload.accounts ? `${plural(selfCount, "self transfer")} across all your transactions.` : `${plural(changed, "transaction")} changed category.`}`,
         actions: p.isUndo ? [["OK", "close"]] : [["Undo", "undo"], ["OK", "close"]],
         undo: p.undo,
       };
@@ -1310,6 +1342,18 @@
     },
     "toggle-always": () => { top().always = !top().always; render(); },
     "save-tx": () => saveTx(top()),
+    "tx-menu": () => { top().txMenu = !top().txMenu; render(); },
+    "close-tx-menu": () => { top().txMenu = false; render(); },
+    "mark-self": () => {
+      top().txMenu = false;
+      showDialog(
+        "Mark as Self Transfer?",
+        "It will not count as spending or money received.",
+        [["Cancel", "close"], ["Mark", "mark-self-confirm"]],
+      );
+    },
+    "mark-self-confirm": () => setManualSelf(true),
+    "unmark-self": () => setManualSelf(false),
     "new-rule": (el) => push({ type: "rule", index: null, ...fieldsFromRule(el.dataset.category ? { set: { category: el.dataset.category } } : {}) }),
     reorder: () => {
       const order = state.reorder;
@@ -1365,7 +1409,7 @@
       const undo = state.dialog.undo;
       state.dialog = null;
       render();
-      commit(undo, "Undone", "Back to how it was.", { isUndo: true });
+      commit(undo, "Undone", "Back to how it was.", { isUndo: true, detailOnly: true });
     },
     close: () => { state.dialog = null; render(); },
     "copy-sms": () => request("copy", { text: findTx(top().ym, top().id).raw }),
