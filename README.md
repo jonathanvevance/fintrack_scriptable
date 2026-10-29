@@ -74,7 +74,7 @@ Tabs in `FinTrack`:
 - A card has the name its bill payment shows as in your bank's SMS.
 - A transaction is a self transfer when it is paid to or received from one of your UPI IDs or names (the whole name, any capitals); when it is a NEFT naming one of your accounts by bank and last digits ("SBIN ··4321"); when it is paid to a name containing a card's bill name; or when it is a card's own bill-paid SMS.
 - For a rare case the app cannot detect, open the transaction, tap **••• → Mark as Self Transfer**. This changes only that transaction and can be changed back to a payment.
-- Self transfers are left out of every total, category, Insights view and the widget. They still appear in See All with a two-account icon, and opening one says why it matched.
+- Self transfers are left out of every total, category, Insights view and the widget. They still appear in See All with a swap-arrows icon, and opening one says why it matched.
 
 Foreign-currency card spends are kept separate from the INR total.
 

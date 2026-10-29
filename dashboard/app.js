@@ -249,8 +249,7 @@
 
   // ---- Shared pieces ----
 
-  const SELF_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="8" height="6" rx="1.5"/>
-    <rect x="13" y="14" width="8" height="6" rx="1.5"/><path d="M13 6h5l-2-2m2 2-2 2M11 18H6l2 2m-2-2 2-2"/></svg>`;
+  const SELF_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h13l-3-3m3 3-3 3M17 17H4l3 3m-3-3 3-3"/></svg>`;
   const selfIcon = (cls = "") => `<span class="ic self-icon ${cls}" style="background:#8e8e93">${SELF_ICON}</span>`;
 
   function txRow(tx) {
