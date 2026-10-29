@@ -802,7 +802,7 @@
     return `<button class="sentence" data-act="edit-rule" data-i="${i}">${lbl}${sentence(state.rules[i])}</button>`;
   }
 
-  const REORDER_ICON = '<svg viewBox="0 0 24 24"><path d="M7 9.5 12 5l5 4.5"/><path d="M7 14.5 12 19l5-4.5"/></svg>';
+  const REORDER_ICON = '<svg viewBox="0 0 24 24"><path d="M8 4v15"/><path d="M4.5 7.5 8 4l3.5 3.5"/><path d="M16 20V5"/><path d="M12.5 16.5 16 20l3.5-3.5"/></svg>';
 
   function rulesView() {
     const txs = allTx();
@@ -1032,10 +1032,7 @@
       <div class="sf">Tap an outlined word to change it.</div>
       ${adds ? `<div class="sh">Add to the sentence</div><div class="group">${adds}</div>` : ""}
       <div id="preview">${previewHtml(screen)}</div>
-      ${editing ? `<div class="group">
-        ${screen.index > 0 ? `<button class="li plain" data-act="move-rule" data-value="-1"><span class="link">Move Up</span></button>` : ""}
-        ${screen.index < state.rules.length - 1 ? `<button class="li plain" data-act="move-rule" data-value="1"><span class="link">Move Down</span></button>` : ""}
-        <button class="li plain" data-act="delete-rule"><span class="danger">Delete Rule</span></button></div>` : ""}
+      ${editing ? `<div class="group"><button class="li plain" data-act="delete-rule"><span class="danger">Delete Rule</span></button></div>` : ""}
       ${screen.sheet ? ruleSheet(screen) : ""}`;
   }
 
@@ -1323,13 +1320,6 @@
     },
     "remove-word": (el) => { top().fields[el.dataset.list].splice(Number(el.dataset.i), 1); render(); },
     "save-rule": () => saveRule(top()),
-    "move-rule": (el) => {
-      const s = top();
-      const next = state.rules.slice();
-      const [rule] = next.splice(s.index, 1);
-      next.splice(s.index + Number(el.dataset.value), 0, rule);
-      commit({ rules: next }, "", "", { quiet: true, pop: true });
-    },
     "delete-rule": () => showDialog("Delete Rule?", describeRule(state.rules[top().index], rupees), [["Cancel", "close"], ["Delete", "delete-confirm", true]]),
     "delete-confirm": () => {
       const i = top().index;
