@@ -5,8 +5,17 @@ Private household money tracking on iPhone, built on [Scriptable](https://script
 - No third party sees the data: no bank logins, no account aggregator, no server, no network calls except `FinTrack Update` downloading code from this repo.
 - **Code lives here; data never does.** All data is JSON in Scriptable's iCloud folder on the phone, under `fintrack/data/`.
 
+## Screenshots
+
+Made-up data, from `dashboard/preview.html`.
+
+| Spending | Insights: Paid To | Rules | Editing a rule |
+|---|---|---|---|
+| <img src="docs/screenshots/spending.png" width="200" alt="Spending tab: month pills, total spent with a donut, spend per category"> | <img src="docs/screenshots/insights-paid-to.png" width="200" alt="Insights, Paid To: bubbles sized by spend per merchant"> | <img src="docs/screenshots/rules.png" width="200" alt="Rules tab: each rule as a sentence with its match count"> | <img src="docs/screenshots/rule-editor.png" width="200" alt="Rule editor: tappable outlined words and the matching transactions"> |
+
 ## Contents
 
+- [Screenshots](#screenshots)
 - [What gets installed](#what-gets-installed)
 - [One-time iPhone setup](#one-time-iphone-setup)
 - [Updating](#updating)
