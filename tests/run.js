@@ -104,6 +104,12 @@ const cases = [
     expect: { template: "sbi-cc-payment", bank: "SBI", accountType: "credit_card", account: null, merchant: "Bill payment via BBPS", currency: "INR", amountPaise: 1543000, date: "2026-10-27" },
   },
   {
+    name: "HDFC card payment received",
+    sms: "HDFC Bank Cardmember, Online Payment of Rs.12,345.00 vide Ref# 000000000001 was credited to your card ending 1111 On 28/OCT/2026_value Date 28/OCT/2026",
+    keys: KEYS.concat(["card", "ref"]),
+    expect: { template: "hdfc-cc-payment", bank: "HDFC", accountType: "credit_card", account: "1111", merchant: "Card bill payment", currency: "INR", amountPaise: 1234500, date: "2026-10-28", card: "1111", ref: "000000000001" },
+  },
+  {
     name: "SBI card payment received, older wording with card and date",
     sms: "We have received payment of Rs.2,000.00 via NEFT and same has been credited to your SBI Card no XXXX5678 on 20-Oct-26.",
     expect: { template: "sbi-cc-payment", bank: "SBI", accountType: "credit_card", account: "5678", merchant: "Bill payment via NEFT", currency: "INR", amountPaise: 200000, date: "2026-10-20" },
@@ -389,6 +395,11 @@ eq("self: HSBC card bill paid from HSBC account",
 eq("self: card bill paid, card not listed", compileAccounts([])(sms("HSBC: Dear Customer, your HSBC A/c 041234***-001 has been debited with INR 1.00- on 26OCT as payment towards card ending with 4444 . Your avl Bal is 1.00.")).label, "");
 eq("self: SBI card payment received",
   isSelf(sms("We have received payment of Rs.15,430.00 via BBPS & the same has been credited to your SBI Credit Card. Your available limit is Rs 1,20,000.00")).label, "SBI Cashback ··5678");
+eq("self: HDFC card payment received, card listed",
+  compileAccounts([{ bank: "HDFC", account: null, cards: [{ last4: "1111", name: "Millennia", bills: [] }] }])(sms("HDFC Bank Cardmember, Online Payment of Rs.100.00 vide Ref# 000000000002 was credited to your card ending 1111 On 28/OCT/2026_value Date 28/OCT/2026")),
+  { kind: "card", match: "Card bill payment", label: "HDFC Millennia ··1111" });
+eq("self: HDFC card payment received, card not listed", isSelf(sms("HDFC Bank Cardmember, Online Payment of Rs.100.00 vide Ref# 000000000002 was credited to your card ending 1111 On 28/OCT/2026_value Date 28/OCT/2026")).label, "");
+eq("date: day/MON/year", parseDate("28/OCT/2026"), "2026-10-28");
 eq("date: December SMS read in January is last year",
   parseSms("HSBC: Dear Customer, your HSBC A/c 041234***-001 has been debited with INR 1.00- on 28DEC as payment towards card ending with 9012 . Your avl Bal is 1.00.", new Date(2027, 0, 3, 9)).date, "2026-12-28");
 eq("accounts: names are optional", accountsError([{ bank: "SBI", account: { last4: "1234", name: "", upi: [] }, cards: [] }]), null);

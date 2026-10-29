@@ -177,7 +177,7 @@ Already covered: HSBC UPI payment (`hsbc-account-paid`), SBI UPI payment (`sbi-u
 spend in INR (`sbi-cc-spend`), SBI card cashback (`sbi-cc-cashback`), HSBC card spend in any currency
 (`hsbc-cc-spend`), HSBC NEFT out (`hsbc-neft-out`), HSBC NEFT in (`hsbc-neft-in`), HSBC money received by UPI
 (`hsbc-upi-credit`), HSBC card bill paid from an HSBC account (`hsbc-card-payment`), SBI Card payment received
-(`sbi-cc-payment`), AutoPay reminders ignored. HSBC's "26OCT" dates have no year: it is taken from when the SMS
+(`sbi-cc-payment`), HDFC card payment received (`hdfc-cc-payment`), AutoPay reminders ignored. HSBC's "26OCT" dates have no year: it is taken from when the SMS
 arrived (the year before, if that date would be later than the SMS).
 
 To do (each needs a real SMS with numbers and names replaced):
