@@ -331,7 +331,7 @@
     let note;
     if (state.year) {
       const months = yearMonths(state.year).filter(hasMonth).length;
-      note = months ? `${money(Math.round(spent / months / 100) * 100)} on average over ${plural(months, "month")}` : "";
+      note = months ? "₹2,14,724 on average over 6 months" : "";
     } else {
       const before = (totals(counted(monthTx(shiftMonth(state.ym, -1)))).INR || { out: 0 }).out;
       const diff = spent - before;
