@@ -24,6 +24,10 @@
     ok("only the winning rule is shown", !/other matching rule/i.test(text()));
     ok("transaction page has no Save button", !app.querySelector('[data-act="save-tx"]'));
     ok("original message is visible", /Rs 1845 debited from A\/c XX1234 towards BIGBASKET/.test(text()), text());
+    const copyMessage = app.querySelector('[data-act="copy-sms"]');
+    click('[data-act="copy-sms"]');
+    await wait(250);
+    ok("message copy confirms inline without a window", /Copied/.test(copyMessage.innerText) && !app.querySelector(".alert"), text().slice(-200));
 
     click('[data-act="change-tx-category"]');
     ok("category choice is a focused page", /Choose Category/.test(text()) && !/Original message/.test(text()), text().slice(0, 400));

@@ -1239,6 +1239,19 @@
     fintrack.send({ action, ...fields });
   }
 
+  function copyInline(button, text) {
+    const original = button.innerHTML;
+    request("copy", { text }, {
+      quiet: true,
+      after: () => {
+        button.innerHTML = `<span class="link">✓ Copied</span>`;
+        setTimeout(() => {
+          if (button.isConnected) button.innerHTML = original;
+        }, 1500);
+      },
+    });
+  }
+
   function useData(data) {
     state.months = data.months || {};
     state.unparsed = data.unparsed || [];
@@ -1258,6 +1271,8 @@
       state.year = null;
     }
     if (result.ok && options.pop) state.stack.pop();
+    if (result.ok && options.after) options.after(result);
+    if (result.ok && options.quiet) return;
     showDialog(result.title || (result.ok ? "Done" : "Something went wrong"), result.message || "");
   }
 
@@ -1534,7 +1549,7 @@
       commit(undo, "Undone", "Back to how it was.", { isUndo: true, detailOnly: true });
     },
     close: () => { state.dialog = null; render(); },
-    "copy-sms": () => request("copy", { text: findTx(top().ym, top().id).raw }),
+    "copy-sms": (el) => copyInline(el, findTx(top().ym, top().id).raw),
     "delete-tx": () => {
       const tx = findTx(top().ym, top().id);
       showDialog("Delete Transaction?", `${shortName(recipient(tx))}, ${money(Math.abs(tx.amountPaise), tx.currency)}. This cannot be undone.`,
@@ -1544,8 +1559,8 @@
     "paste-sms": () => request("pasteSms"),
     "open-guessed": () => push({ type: "guessed" }),
     "open-unparsed": () => push({ type: "unparsed" }),
-    "copy-guessed": (el) => request("copy", { text: findTx(el.dataset.ym, el.dataset.id).raw }),
-    "copy-guessed-all": () => request("copy", { text: guessedReviewText() }),
+    "copy-guessed": (el) => copyInline(el, findTx(el.dataset.ym, el.dataset.id).raw),
+    "copy-guessed-all": (el) => copyInline(el, guessedReviewText()),
     "mark-guessed": (el) => {
       const tx = findTx(el.dataset.ym, el.dataset.id);
       const manual = { ...(tx.manual || {}), lowConfidenceReviewed: true };
@@ -1556,9 +1571,9 @@
         { detailOnly: true },
       );
     },
-    "copy-unparsed": (el) => request("copy", { text: state.unparsed.find((u) => u.id === el.dataset.id).text }),
-    "copy-unparsed-all": () => request("copy", { text: unrecognisedReviewText() }),
-    "copy-review": () => request("copy", { text: reviewText() }),
+    "copy-unparsed": (el) => copyInline(el, state.unparsed.find((u) => u.id === el.dataset.id).text),
+    "copy-unparsed-all": (el) => copyInline(el, unrecognisedReviewText()),
+    "copy-review": (el) => copyInline(el, reviewText()),
     "clear-unparsed": () => showDialog("Clear Unrecognised?", `${plural(state.unparsed.length, "message")} will be removed.`, [["Cancel", "close"], ["Clear", "clear-confirm", true]]),
     "clear-confirm": () => { state.dialog = null; render(); request("clearUnparsed", {}, { pop: true }); },
     update: () => request("update"),

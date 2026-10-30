@@ -34,20 +34,22 @@
     ok("More explains guessed transactions affect totals", moreRows.some((row) => /Check Guessed Transactions Already included in your totals 1/.test(row)), moreRows.join(" | "));
     ok("More explains missed messages do not affect totals", moreRows.some((row) => /Messages FinTrack Missed Not included in your totals 1/.test(row)), moreRows.join(" | "));
     ok("More offers code-editor copy", app.querySelector('[data-act="copy-review"]') && /code editor's AI chat/.test(text()));
+    const copyReview = app.querySelector('[data-act="copy-review"]');
     click('[data-act="copy-review"]');
     const everything = sent[sent.length - 1];
     ok("copy everything keeps both exact SMS bodies", everything.action === "copy" && everything.text.includes(guessedSms) && everything.text.includes(missedSms), JSON.stringify(everything));
     ok("copy everything labels both states", /guessed — included in totals/.test(everything.text) && /unrecognised — not in totals/.test(everything.text), everything.text);
     await wait(250);
-    click('[data-act="close"]');
+    ok("copy confirms inline without a window", /Copied/.test(copyReview.innerText) && !app.querySelector(".alert"), text().slice(-200));
 
     click('[data-act="open-guessed"]');
     ok("guessed queue shows parsed summary and exact SMS", /Check Guesses These already affect your totals/.test(text()) && text().includes(guessedSms), text().slice(0, 400));
     ok("guessed queue has only copy and mark actions", app.querySelector('[data-act="copy-guessed"]') && app.querySelector('[data-act="mark-guessed"]') && !/Fix|Edit/.test(text()));
+    const copyGuessed = app.querySelector('[data-act="copy-guessed"]');
     click('[data-act="copy-guessed"]');
     ok("single guessed copy is raw SMS only", sent[sent.length - 1].action === "copy" && sent[sent.length - 1].text === guessedSms, JSON.stringify(sent[sent.length - 1]));
     await wait(250);
-    click('[data-act="close"]');
+    ok("single guessed copy confirms inline", /Copied/.test(copyGuessed.innerText) && !app.querySelector(".alert"));
     click('[data-act="mark-guessed"]');
     const marked = sent[sent.length - 1];
     ok("mark correct saves a review flag only", marked.action === "save" && marked.manual.id === guess.id && marked.manual.manual.lowConfidenceReviewed === true, JSON.stringify(marked));
@@ -61,8 +63,11 @@
     click('[data-act="open-unparsed"]');
     ok("missed queue says not in totals and shows exact SMS", /Messages FinTrack Missed These do not affect your totals/.test(text()) && text().includes(missedSms), text().slice(0, 400));
     ok("missed queue only offers copy", app.querySelector('[data-act="copy-unparsed"]') && !/Add Transaction|Ignore|Delete|Clear/.test(text()));
+    const copyUnparsed = app.querySelector('[data-act="copy-unparsed"]');
     click('[data-act="copy-unparsed"]');
     ok("single missed copy is raw SMS only", sent[sent.length - 1].action === "copy" && sent[sent.length - 1].text === missedSms, JSON.stringify(sent[sent.length - 1]));
+    await wait(250);
+    ok("single missed copy confirms inline", /Copied/.test(copyUnparsed.innerText) && !app.querySelector(".alert"));
   } catch (error) {
     out.push(`FAIL exception ${error.message} ${(error.stack || "").split("\n")[1]}`);
   }
