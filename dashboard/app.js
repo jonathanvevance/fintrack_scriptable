@@ -342,11 +342,6 @@
       const diff = spent - before;
       note = before ? `${money(Math.abs(diff))} ${diff <= 0 ? "less" : "more"} than ${monthName(shiftMonth(state.ym, -1))}` : "";
     }
-    const foreign = Object.keys(t).filter((c) => c !== "INR" && t[c].out).map((c) => `${money(t[c].out, c)}`);
-    const unavailable = list.filter((tx) => tx.currency !== "INR" && tx.amountPaise < 0 && !Number.isFinite(tx.inrPaise)).length;
-    const foreignNote = foreign.length
-      ? unavailable ? `${foreign.join(", ")} foreign · ${plural(unavailable, "rate")} unavailable` : `includes ${foreign.join(", ")} at date rates`
-      : "";
     const untagged = list.filter((tx) => !tx.category).length;
     const cats = categoryTotals(list);
 
@@ -355,7 +350,7 @@
       <div class="group pad" style="display:flex;align-items:center;gap:16px">${cats.length ? ring(cats) : ""}
         <div style="min-width:0"><div class="muted">Spent in ${esc(state.year || monthName(state.ym))}</div>
           <div class="big">${esc(money(spent))}</div>
-          <div class="muted small">${esc([note, foreignNote].filter(Boolean).join(" · ") || "\u00a0")}</div>
+          <div class="muted small">${esc(note || "\u00a0")}</div>
           ${received ? `<button class="received" data-act="open-list" data-filter="received">Received <b class="in">${esc(money(received))}</b><span class="chev"></span></button>` : ""}</div></div>
       ${state.year ? `<div class="group pad"><div class="muted small">Each month · tap one to open it</div>${yearBars(state.year)}</div>` : ""}
       ${cats.length ? `<div class="sh">Categories</div><div class="group">${categoryRows(list)}</div>` : ""}
