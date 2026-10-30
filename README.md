@@ -66,7 +66,10 @@ Tabs in `FinTrack`:
   - **Reorder:** tap **⇅**, drag the **≡** handles, tap **⇅** again to save (or **Cancel**).
   - **Categories** (row at the top): every category, where you can rename one, change its icon, see and add the rules that set it, merge it into another or delete it. **New Category** takes a name, an emoji and a colour. The icon picker offers a few emoji that fit the name (Pets: 🐾 🐶 🐱 🦴 🐟), the emoji your categories already use, and **Any emoji…** for anything on the keyboard.
   - A catch-all rule such as "When I receive money, it's Received" works if it is the last rule.
-- **More.** My Accounts, Add SMS from Clipboard, Unrecognised Messages, Update FinTrack, version.
+- **More.** My Accounts, Add SMS from Clipboard, parser review, Update FinTrack, version.
+  - **Check Guessed Transactions:** general-parser guesses already included in totals. Copy the exact SMS for parser work, or mark a correct guess so it leaves the queue.
+  - **Messages FinTrack Missed:** messages not included in totals. Copy one or all exact SMS messages to add support in the code editor.
+  - **Copy Everything for Code Editor:** copies both queues with labels around the unchanged SMS text.
 
 **Self transfers** move money between your own accounts, so they count as neither spent nor received. List your banks under **More → My Accounts**: one row per bank; a bank's page lists its account (optional) and its cards, each with its own page.
 

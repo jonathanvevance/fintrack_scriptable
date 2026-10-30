@@ -493,14 +493,18 @@
   // ---- More: capture by hand, unrecognised messages, update ----
 
   function toCheck() {
-    return allTx().filter((t) => t.confidence === "low");
+    return allTx().filter((t) => t.confidence === "low" && !(t.manual && t.manual.lowConfidenceReviewed));
   }
 
+  const reviewBlock = (label, text) => `[${label}]\n${text}`;
+  const guessedReviewText = () => toCheck()
+    .map((t) => reviewBlock(`guessed — included in totals: ${money(t.amountPaise, t.currency)} ${t.bank || "?"} ··${t.account || "?"}`, t.raw))
+    .join("\n\n---\n\n");
+  const unrecognisedReviewText = () => state.unparsed
+    .map((u) => reviewBlock("unrecognised — not in totals", u.text))
+    .join("\n\n---\n\n");
   function reviewText() {
-    return [
-      ...state.unparsed.map((u) => `[unrecognised]\n${u.text}`),
-      ...toCheck().map((t) => `[check: parsed as ${money(t.amountPaise, t.currency)} ${t.bank || "?"} ··${t.account || "?"}]\n${t.raw}`),
-    ].join("\n\n---\n\n");
+    return [guessedReviewText(), unrecognisedReviewText()].filter(Boolean).join("\n\n===\n\n");
   }
 
   function moreView() {
@@ -517,11 +521,11 @@
       <div class="sf">Copy a bank SMS in Messages first. It is saved the same way the automation would.</div>
       <div class="sh">Review</div>
       <div class="group">
-        <button class="li plain" data-act="open-unparsed"><div class="main"><div class="t1">Unrecognised Messages</div></div><span class="val">${state.unparsed.length}</span><span class="chev"></span></button>
-        <div class="li plain"><div class="main"><div class="t1">Parsed with low confidence</div></div><span class="val">${toCheck().length}</span></div>
-        ${review ? `<button class="li plain" data-act="copy-review"><span class="link">Copy All for Review</span></button>` : ""}
+        <button class="li plain" data-act="open-guessed"><span class="review-badge guessed">?</span><div class="main"><div class="t1">Check Guessed Transactions</div><div class="t2">Already included in your totals</div></div><span class="val">${toCheck().length}</span><span class="chev"></span></button>
+        <button class="li plain" data-act="open-unparsed"><span class="review-badge missed">!</span><div class="main"><div class="t1">Messages FinTrack Missed</div><div class="t2">Not included in your totals</div></div><span class="val">${state.unparsed.length}</span><span class="chev"></span></button>
+        ${review ? `<button class="li plain" data-act="copy-review"><span class="link">Copy Everything for Code Editor</span></button>` : ""}
       </div>
-      <div class="sf">Paste the copied messages into the FinTrack dev chat to get bank templates added.</div>
+      <div class="sf">Paste exact messages into your code editor's AI chat to add or improve parser templates.</div>
       <div class="sh">App</div>
       <div class="group">
         <button class="li plain" data-act="update"><span class="link">Update FinTrack</span></button>
@@ -529,13 +533,37 @@
       </div>`;
   }
 
+  function guessedView() {
+    const facts = (tx) => [
+      `${money(Math.abs(tx.amountPaise), tx.currency)} ${tx.amountPaise < 0 ? "paid" : "received"}`,
+      [tx.bank, tx.account ? "··" + tx.account : null].filter(Boolean).join(" "),
+      tx.date,
+    ].filter(Boolean).join(" · ");
+    const rows = toCheck()
+      .sort((a, b) => (a.date < b.date ? 1 : -1))
+      .map((tx) => `<div class="review-card"><div class="review-body">
+        <div class="review-status"><span class="review-badge guessed">FinTrack guessed</span><span>In totals</span></div>
+        <div class="review-title">${esc(recipient(tx))}</div>
+        <div class="review-facts">${esc(facts(tx))}</div>
+        <div class="review-label">Exact SMS</div><div class="review-raw">${esc(tx.raw)}</div></div>
+        <div class="review-actions"><button data-act="copy-guessed" data-ym="${esc(tx.date.slice(0, 7))}" data-id="${esc(tx.id)}">Copy Exact SMS</button>
+          <button data-act="mark-guessed" data-ym="${esc(tx.date.slice(0, 7))}" data-id="${esc(tx.id)}"><b>Mark Correct</b></button></div></div>`)
+      .join("");
+    const end = rows ? `<button data-act="copy-guessed-all">Copy All</button>` : "";
+    return `${backNav("Guessed", end)}<div class="large">Check Guesses<small>These already affect your totals.</small></div>
+      ${rows || `<div class="review-empty">All guesses marked correct.</div>`}`;
+  }
+
   function unparsedView() {
     const rows = state.unparsed
-      .map((u) => `<button class="li plain" data-act="copy-unparsed" data-id="${esc(u.id)}"><div class="main"><div class="t2" style="white-space:normal;color:var(--text);font-size:15px;line-height:1.35">${esc(u.text)}</div></div></button>`)
+      .map((u) => `<div class="review-card"><div class="review-body">
+        <div class="review-status"><span class="review-badge missed">Not recognised</span><span>Not in totals</span></div>
+        <div class="review-label">Exact SMS</div><div class="review-raw">${esc(u.text)}</div></div>
+        <div class="review-actions one"><button data-act="copy-unparsed" data-id="${esc(u.id)}">Copy Exact SMS</button></div></div>`)
       .join("");
-    return `${backNav("Unrecognised", state.unparsed.length ? `<button data-act="clear-unparsed">Clear</button>` : "")}<div style="height:8px"></div>
-      <div class="group">${rows || `<div class="empty">Nothing unrecognised</div>`}</div>
-      ${rows ? `<div class="sf" style="margin-top:-12px">Tap a message to copy it.</div>` : ""}`;
+    const end = rows ? `<button data-act="copy-unparsed-all">Copy All</button>` : "";
+    return `${backNav("Unrecognised", end)}<div class="large">Messages FinTrack Missed<small>These do not affect your totals.</small></div>
+      ${rows || `<div class="review-empty">Nothing unrecognised.</div>`}`;
   }
 
   // ---- My Accounts: your banks, each with an optional account (plus UPI IDs) and cards ----
@@ -1213,7 +1241,7 @@
     }
     const screen = top();
     state.previewLook = (screen && screen.newLook) || null;
-    const views = { tx: txView, list: listView, rule: ruleView, unparsed: unparsedView, categories: categoriesView, category: categoryView, merge: mergeView,
+    const views = { tx: txView, list: listView, rule: ruleView, guessed: guessedView, unparsed: unparsedView, categories: categoriesView, category: categoryView, merge: mergeView,
       accounts: accountsView, "add-bank": addBankView, bank: bankView, account: accountView, card: cardView };
     let body = screen ? views[screen.type](screen) : { spending: spendingView, trends: trendsView, rules: rulesView, more: moreView }[state.tab]();
     if (!screen && state.tab !== "rules" && state.tabHistory.length) body = `<div class="nav">${tabBack()}<span class="mid"></span><span class="end"></span></div>${body}`;
@@ -1419,8 +1447,22 @@
     },
     "delete-tx-confirm": () => { state.dialog = null; render(); request("deleteTx", { ym: top().ym, id: top().id }, { pop: true }); },
     "paste-sms": () => request("pasteSms"),
+    "open-guessed": () => push({ type: "guessed" }),
     "open-unparsed": () => push({ type: "unparsed" }),
+    "copy-guessed": (el) => request("copy", { text: findTx(el.dataset.ym, el.dataset.id).raw }),
+    "copy-guessed-all": () => request("copy", { text: guessedReviewText() }),
+    "mark-guessed": (el) => {
+      const tx = findTx(el.dataset.ym, el.dataset.id);
+      const manual = { ...(tx.manual || {}), lowConfidenceReviewed: true };
+      commit(
+        { manual: { ym: el.dataset.ym, id: tx.id, manual } },
+        "Marked Correct",
+        "This guess stays in your totals and is removed from Review.",
+        { detailOnly: true },
+      );
+    },
     "copy-unparsed": (el) => request("copy", { text: state.unparsed.find((u) => u.id === el.dataset.id).text }),
+    "copy-unparsed-all": () => request("copy", { text: unrecognisedReviewText() }),
     "copy-review": () => request("copy", { text: reviewText() }),
     "clear-unparsed": () => showDialog("Clear Unrecognised?", `${plural(state.unparsed.length, "message")} will be removed.`, [["Cancel", "close"], ["Clear", "clear-confirm", true]]),
     "clear-confirm": () => { state.dialog = null; render(); request("clearUnparsed", {}, { pop: true }); },

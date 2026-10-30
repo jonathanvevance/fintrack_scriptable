@@ -78,6 +78,24 @@ input::placeholder { color: var(--sec); }
 .card .lead { font-size: 17px; line-height: 1.35; }
 .attention { display: flex; align-items: center; gap: 12px; width: calc(100% - 32px); }
 
+/* Parser review: exact SMS evidence for work in the code editor. */
+.review-badge { flex: 0 0 auto; border-radius: 10px; padding: 3px 8px; font-size: 12px; font-weight: 600; }
+.review-badge.guessed { color: #9a5700; background: #fff0d8; }
+.review-badge.missed { color: #b4231a; background: #ffe3e1; }
+.review-card { margin: 0 16px 14px; overflow: hidden; border-radius: 14px; background: var(--card); }
+.review-body { padding: 14px 16px; }
+.review-status { display: flex; align-items: center; justify-content: space-between; color: var(--sec); font-size: 13px; margin-bottom: 10px; }
+.review-title { font-size: 18px; font-weight: 600; }
+.review-facts { color: var(--sec); font-size: 13px; margin-top: 2px; }
+.review-label { color: var(--sec); font-size: 11px; text-transform: uppercase; letter-spacing: .3px; margin-top: 13px; }
+.review-raw { margin-top: 5px; padding: 10px 11px; border-radius: 9px; background: var(--fill); font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
+.review-actions { display: grid; grid-template-columns: 1fr 1fr; border-top: .5px solid var(--sep); }
+.review-actions.one { grid-template-columns: 1fr; }
+.review-actions button { padding: 12px 7px; color: var(--blue); text-align: center; }
+.review-actions button + button { border-left: .5px solid var(--sep); }
+.review-empty { color: var(--sec); padding: 56px 24px; text-align: center; }
+
 .seg { display: flex; background: var(--fill); border-radius: 9px; padding: 2px; flex: 0 0 200px; }
 .seg button { flex: 1; text-align: center; font-size: 13px; padding: 5px 0; border-radius: 7px; }
 .seg .on { background: var(--seg-on); font-weight: 600; box-shadow: 0 2px 6px rgba(0, 0, 0, .12); }
