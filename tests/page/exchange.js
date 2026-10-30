@@ -17,6 +17,10 @@
     const expected = FT.format.totals(counted).INR.out;
     ok("converted USD joins INR spending total", app.querySelector(".big").innerText === FT.format.money(expected), `${app.querySelector(".big").innerText} vs ${FT.format.money(expected)}`);
     ok("spending summary has no currency-conversion suffix", !/includes \$20|date rates/.test(text()), text().slice(0, 250));
+    ok("monthly spending has no previous-month comparison", !/\b(?:less|more) than\b/.test(text()), text().slice(0, 250));
+    click('[data-act="year"][data-value="2026"]');
+    ok("year summary keeps only monthly average", /Monthly average:/.test(text()) && !/\b(?:less|more) than\b/.test(text()), text().slice(0, 250));
+    click('[data-act="month"][data-ym="2026-10"]');
 
     click('[data-act="open-list"][data-filter="all"]');
     const row = [...app.querySelectorAll('[data-act="open-tx"]')].find((element) => /OPENAI/.test(element.innerText));

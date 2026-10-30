@@ -333,14 +333,10 @@
     const t = totals(list);
     const spent = (t.INR || { out: 0 }).out;
     const received = (t.INR || { in: 0 }).in;
-    let note;
+    let note = "";
     if (state.year) {
       const months = yearMonths(state.year).filter(hasMonth).length;
       note = months ? `Monthly average: ${money(Math.round(spent / months / 100) * 100)}` : "";
-    } else {
-      const before = (totals(counted(monthTx(shiftMonth(state.ym, -1)))).INR || { out: 0 }).out;
-      const diff = spent - before;
-      note = before ? `${money(Math.abs(diff))} ${diff <= 0 ? "less" : "more"} than ${monthName(shiftMonth(state.ym, -1))}` : "";
     }
     const untagged = list.filter((tx) => !tx.category).length;
     const cats = categoryTotals(list);
