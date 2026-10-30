@@ -127,6 +127,16 @@ const cases = [
     expect: { template: "sbi-cc-spend", bank: "SBI", accountType: "credit_card", account: "5678", merchant: "UBER INDIA SYSTEMS", currency: "INR", amountPaise: -8900, date: "2026-10-22" },
   },
   {
+    name: "SBI card spend in adjacent USD",
+    sms: "USD21.98 spent on your SBI Credit Card ending 5678 at SOME NAME on 07/10/26. Trxn. not done by you? Report at https://sbicard.com/Dispute",
+    expect: { template: "sbi-cc-spend", bank: "SBI", accountType: "credit_card", account: "5678", merchant: "SOME NAME", currency: "USD", amountPaise: -2198, date: "2026-10-07" },
+  },
+  {
+    name: "SBI card spend in lowercase EUR with a space",
+    sms: "eur 10.50 spent on your SBI Credit Card ending 5678 at SOME NAME on 08/10/26. Trxn. not done by you? Report at https://sbicard.com/Dispute",
+    expect: { template: "sbi-cc-spend", bank: "SBI", accountType: "credit_card", account: "5678", merchant: "SOME NAME", currency: "EUR", amountPaise: -1050, date: "2026-10-08" },
+  },
+  {
     name: "HSBC account payment to a person",
     sms: "INR 1.00 is paid from HSBC account 041-123456-001 to RAHUL KUMAR on 28-Oct-26 with ref 529912345678. If this is not done by you, call 18002673456 to report.",
     expect: { template: "hsbc-account-paid", bank: "HSBC", accountType: "bank", account: "6001", merchant: "RAHUL KUMAR", currency: "INR", amountPaise: -100, date: "2026-10-28" },
@@ -175,6 +185,11 @@ const cases = [
     name: "generic without a date uses the received date",
     sms: "INR 1,000 spent on ICICI Bank Card XX1111 at AMAZON. Avl Lmt: INR 99,000",
     expect: { template: "generic", bank: "ICICI", accountType: "bank", account: "1111", merchant: null, currency: "INR", amountPaise: -100000, date: "2026-10-27" },
+  },
+  {
+    name: "generic foreign currency after keyword",
+    sms: "Your card was charged AED25.50 at a merchant on 27-10-26. -Axis Bank",
+    expect: { template: "generic", bank: "Axis", accountType: "bank", account: null, merchant: null, currency: "AED", amountPaise: -2550, date: "2026-10-27" },
   },
 ];
 
@@ -249,6 +264,7 @@ eq("collect request is ignored", parseSms("RAHUL has requested money of Rs.200 f
 eq("bill reminder is ignored", parseSms("Your HSBC Credit Card statement: total INR 12,345.00, minimum due INR 620.00, payment due 05/11/26.", RECEIVED), null);
 eq("chat message is ignored", parseSms("See you at 7 for dinner?", RECEIVED), null);
 eq("empty is ignored", parseSms("   ", RECEIVED), null);
+eq("malformed three-decimal amount is ignored", parseSms("USD21.989 spent on your SBI Credit Card ending 5678 at SOME NAME on 07/10/26.", RECEIVED), null);
 
 eq("parseDate dd/mm/yyyy", parseDate("05/11/2026"), "2026-11-05");
 eq("parseDate dd-Mon-yy", parseDate("27-Oct-26"), "2026-10-27");
