@@ -24,7 +24,15 @@
     ok("self-transfer action starts hidden", !app.querySelector('[data-act="mark-self"]'));
 
     click('[data-act="tx-menu"]');
-    ok("more menu has rare transaction actions", /Mark as Self Transfer/.test(text()) && /Delete Transaction/.test(text()) && /Cancel/.test(text()), text().slice(0, 260));
+    const markButton = app.querySelector('[data-act="mark-self"]');
+    const deleteButton = app.querySelector('.tx-menu [data-act="delete-tx"]');
+    const red = document.createElement("span");
+    red.style.color = "var(--red)";
+    app.appendChild(red);
+    ok("more menu has only the two rare actions", markButton && deleteButton && !/Cancel/.test(app.querySelector(".tx-menu").innerText), text().slice(0, 260));
+    ok("menu actions use the same font size", getComputedStyle(markButton).fontSize === getComputedStyle(deleteButton).fontSize);
+    ok("delete action is red", getComputedStyle(deleteButton).color === getComputedStyle(red).color, getComputedStyle(deleteButton).color);
+    red.remove();
     click('[data-act="mark-self"]');
     ok("mark asks for confirmation", /Mark as Self Transfer\? It will not count as spending or money received/.test(text()), text().slice(-180));
     click('[data-act="mark-self-confirm"]');

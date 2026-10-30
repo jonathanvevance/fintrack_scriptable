@@ -436,8 +436,7 @@
   function txMenu() {
     return `<button class="tx-menu-dim" data-act="close-tx-menu" aria-label="Close menu"></button>
       <div class="tx-menu"><button data-act="mark-self">Mark as Self Transfer</button>
-        <button data-act="delete-tx" class="danger">Delete Transaction</button>
-        <button data-act="close-tx-menu" class="muted">Cancel</button></div>`;
+        <button data-act="delete-tx" class="danger">Delete Transaction</button></div>`;
   }
 
   function txView(screen) {

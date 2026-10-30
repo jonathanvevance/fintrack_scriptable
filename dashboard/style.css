@@ -70,6 +70,7 @@ input::placeholder { color: var(--sec); }
 .tx-menu { position: fixed; z-index: 7; top: calc(var(--banner) + 38px); right: 12px; width: 235px; overflow: hidden;
   background: var(--card); border-radius: 12px; box-shadow: 0 8px 28px rgba(0, 0, 0, .24); }
 .tx-menu button { display: block; width: 100%; padding: 14px 16px; text-align: left; color: var(--blue); }
+.tx-menu button.danger { color: var(--red); }
 .tx-menu button + button { border-top: .5px solid var(--sep); }
 
 
