@@ -9,7 +9,7 @@
 // Needs FT.tags (lib/tags.js), FT.format (lib/format.js) and FT.accounts (lib/accounts.js) loaded first.
 
 (function () {
-  const { compileRules, tagsFor, tagAll, describeRule, ruleSentence, orList, patternWords, isPlainPattern, recipientPattern } = FT.tags;
+  const { compileRules, tagsFor, ruleIndexFor, tagAll, describeRule, ruleSentence, orList, patternWords, isPlainPattern, recipientPattern } = FT.tags;
   const { money, monthLabel, shiftMonth, totals, categoryTotals, merchantTotals, recurringPayments, inrValue } = FT.format;
   const { checkAccounts, compileAccounts, accountLabel } = FT.accounts;
   const app = document.getElementById("app");
@@ -405,12 +405,12 @@
         <div class="muted">${esc([when, tx.bank, tx.account ? "··" + tx.account : null].filter(Boolean).join(" · "))}</div></div>`;
   }
 
-  function txMessage(tx) {
-    return `<div class="sh">Message</div>
+  function txMessage(tx, showDelete = true) {
+    return `<div class="sh">Original Message</div>
       <div class="group pad muted small" style="line-height:1.4;user-select:text;-webkit-user-select:text">${esc(tx.raw)}</div>
       <div class="group">
         <button class="li plain" data-act="copy-sms"><span class="link">Copy SMS</span></button>
-        <button class="li plain" data-act="delete-tx"><span class="danger">Delete Transaction</span></button></div>`;
+        ${showDelete ? `<button class="li plain" data-act="delete-tx"><span class="danger">Delete Transaction</span></button>` : ""}</div>`;
   }
 
   // Why, by tx.self.kind (see compileAccounts): "you@okhsbc is your HSBC Savings ··6001."
@@ -436,26 +436,37 @@
   function txMenu() {
     return `<button class="tx-menu-dim" data-act="close-tx-menu" aria-label="Close menu"></button>
       <div class="tx-menu"><button data-act="mark-self">Mark as Self Transfer</button>
+        <button data-act="delete-tx" class="danger">Delete Transaction</button>
         <button data-act="close-tx-menu" class="muted">Cancel</button></div>`;
   }
 
   function txView(screen) {
     const tx = tag([findTx(screen.ym, screen.id)])[0];
     if (tx.self) return selfView(tx);
-    const choices = knownCategories();
-    if (screen.draft && !choices.includes(screen.draft)) choices.unshift(screen.draft);
-    const rows = choices
-      .map((name) => `<button class="li" data-act="pick-cat" data-value="${esc(name)}">${icon(name, "sq")}<div class="main"><div class="t1">${esc(name)}</div></div>${screen.draft === name ? `<span class="check">✓</span>` : ""}</button>`)
-      .join("");
-    const sameMerchant = tx.merchant ? allTx().filter((t) => t.merchant === tx.merchant).length : 0;
-    return `${backNav("", `<span class="tx-actions"><button data-act="tx-menu" aria-label="More transaction actions">•••</button><button data-act="save-tx"><b>Save</b></button></span>`)}
-      ${txHead(tx, icon(screen.draft, "xl"))}
+    const raw = findTx(screen.ym, screen.id);
+    const ruleIndex = ruleIndexFor(state.compiled, raw);
+    const category = tx.category;
+    const manual = Boolean(raw.manual && raw.manual.category);
+    const rule = ruleIndex == null ? null : state.rules[ruleIndex];
+    const categoryRow = `<button class="li" data-act="change-tx-category">${icon(category, "sq")}<div class="main">
+      <div class="t1 ${category ? "" : "link"}">${esc(category || "Choose a category")}</div>
+      ${manual ? `<div class="t2">Applied only to this transaction</div>` : ""}</div><span class="chev"></span></button>`;
+    const ruleRow = rule
+      ? `<button class="li plain" data-act="edit-rule" data-i="${ruleIndex}"><div class="main"><div class="t1">Rule ${ruleIndex + 1} applied</div>
+          <div class="t2" style="white-space:normal">${esc(describeRule(rule, rupees))}</div></div><span class="chev"></span></button>`
+      : "";
+    const automate = manual && tx.merchant
+      ? `<div class="sh">Use this category again</div><div class="group">
+          <button class="li plain" data-act="new-rule-from-tx"><div class="main"><div class="t1">Add a New Rule</div>
+            <div class="t2">Use ${esc(category)} for future ${esc(shortName(tx.merchant))} payments</div></div><span class="chev"></span></button>
+          <button class="li plain" data-act="add-to-rule"><div class="main"><div class="t1">Add to an Existing Rule</div>
+            <div class="t2">Include ${esc(shortName(tx.merchant))} in a rule you already have</div></div><span class="chev"></span></button></div>`
+      : "";
+    return `${backNav("", `<span class="tx-actions"><button data-act="tx-menu" aria-label="More transaction actions">•••</button></span>`)}
+      ${txHead(tx, icon(category, "xl"))}
       <div class="sh">Category</div>
-      <div class="group">${rows}
-        <button class="li plain" data-act="open-categories"><span class="link">Manage Categories…</span></button></div>
-      ${tx.merchant ? `<div class="group"><button class="li plain" data-act="toggle-always"><div class="main"><div class="t1" style="white-space:normal">Always put ${esc(shortName(tx.merchant))} in ${esc(screen.draft || "…")}</div>
-          <div class="t2">Applies to ${plural(sameMerchant, "transaction")} now and every future one</div></div><span class="toggle ${screen.always ? "on" : ""}"></span></button></div>` : ""}
-      ${txMessage(tx)}${screen.txMenu ? txMenu() : ""}`;
+      <div class="group">${categoryRow}${ruleRow}</div>
+      ${automate}${txMessage(tx, false)}${screen.txMenu ? txMenu() : ""}`;
   }
 
   function setManualSelf(isSelfTransfer) {
@@ -474,25 +485,77 @@
     );
   }
 
-  function saveTx(screen) {
+  function chooseTxCategory(screen, category) {
     const tx = findTx(screen.ym, screen.id);
-    const category = screen.draft;
-    if (!category) return showDialog("Pick a category", "Choose one from the list or add a new one.");
     const fromRules = tagsFor(state.compiled, { ...tx, manual: undefined }).category;
     const manual = { ...(tx.manual || {}) };
-    const payload = {};
-    if (screen.always && tx.merchant) {
-      payload.rules = [{ when: { merchant: recipientPattern([tx.merchant], true) }, set: { category } }, ...state.rules];
-      delete manual.category;
-    } else if (category === fromRules) {
-      delete manual.category;
-    } else {
-      manual.category = category;
-    }
-    if (JSON.stringify(manual) !== JSON.stringify(tx.manual || {})) payload.manual = { ym: screen.ym, id: tx.id, manual };
-    if (!payload.rules && !payload.manual) return back();
-    const detail = payload.rules ? `Every ${shortName(tx.merchant)} transaction is now ${category}.` : `This transaction is now ${category}.`;
-    commit(payload, payload.rules ? "Rule saved" : "Category saved", detail, { pop: true });
+    if (category === fromRules) delete manual.category;
+    else manual.category = category;
+    if (JSON.stringify(manual) === JSON.stringify(tx.manual || {})) return back();
+    commit(
+      { manual: { ym: screen.ym, id: tx.id, manual } },
+      "Category saved",
+      `This transaction is now ${category}.`,
+      { pop: true, quiet: true },
+    );
+  }
+
+  function txCategoryView(screen) {
+    const tx = tag([findTx(screen.ym, screen.id)])[0];
+    const rows = knownCategories()
+      .map((name) => `<button class="li" data-act="choose-tx-category" data-value="${esc(name)}">${icon(name, "sq")}
+        <div class="main"><div class="t1">${esc(name)}</div></div>${tx.category === name ? `<span class="check">✓</span>` : ""}</button>`)
+      .join("");
+    return `${backNav("Choose Category")}<div style="height:8px"></div><div class="group">${rows}</div>`;
+  }
+
+  function ruleWithMerchant(rule, merchant) {
+    const pattern = rule.when && rule.when.merchant;
+    if (!pattern || !isPlainPattern(pattern)) return null;
+    const { exact, words } = patternWords(pattern);
+    if (words.some((word) => word.toLowerCase() === merchant.toLowerCase())) return null;
+    return { ...rule, when: { ...rule.when, merchant: recipientPattern([...words, merchant], exact) } };
+  }
+
+  function rulesThatCanInclude(tx, category) {
+    const raw = { ...tx, manual: undefined };
+    const found = [];
+    state.rules.forEach((rule, index) => {
+      if (!rule.set || rule.set.category !== category || state.compiled[index].matches(raw)) return;
+      const updated = ruleWithMerchant(rule, tx.merchant);
+      if (!updated) return;
+      const rules = state.rules.map((item, i) => (i === index ? updated : item));
+      if (tagsFor(compileRules(rules), raw).category === category) found.push({ index, updated });
+    });
+    return found;
+  }
+
+  function txRulePickerView(screen) {
+    const tx = findTx(screen.ym, screen.id);
+    const category = tx.manual && tx.manual.category;
+    const rows = rulesThatCanInclude(tx, category)
+      .map(({ index }) => `<button class="li plain" data-act="include-in-rule" data-i="${index}"><div class="main">
+        <div class="t1">Rule ${index + 1}</div><div class="t2" style="white-space:normal">${esc(describeRule(state.rules[index], rupees))}</div>
+        </div><span class="chev"></span></button>`)
+      .join("");
+    return `${backNav("Add to Existing Rule")}<div class="sf" style="margin-top:8px">Choose a ${esc(category)} rule that should also include ${esc(shortName(tx.merchant))}.</div>
+      ${rows ? `<div class="group">${rows}</div>` : `<div class="group"><div class="empty">No existing ${esc(category)} rule can safely include this transaction. Add a new rule instead.</div></div>`}`;
+  }
+
+  function includeTxInRule(screen, index) {
+    const tx = findTx(screen.ym, screen.id);
+    const category = tx.manual && tx.manual.category;
+    const candidate = rulesThatCanInclude(tx, category).find((item) => item.index === index);
+    if (!candidate) return showDialog("Rule no longer available", "Go back and try again.");
+    const rules = state.rules.map((rule, i) => (i === index ? candidate.updated : rule));
+    const manual = { ...(tx.manual || {}) };
+    delete manual.category;
+    commit(
+      { rules, manual: { ym: screen.ym, id: tx.id, manual } },
+      "Rule updated",
+      `${shortName(tx.merchant)} is now included in Rule ${index + 1}.`,
+      { pop: true },
+    );
   }
 
   // The whole categories map with `newLook` saved for `category`, or null when nothing changes.
@@ -1146,7 +1209,14 @@
     const next = state.rules.slice();
     if (screen.index == null) next.unshift(rule);
     else next[screen.index] = rule;
-    commit({ rules: next }, "Rule saved", describeRule(rule, rupees), { pop: true });
+    const payload = { rules: next };
+    if (screen.txRef) {
+      const tx = findTx(screen.txRef.ym, screen.txRef.id);
+      const manual = { ...(tx.manual || {}) };
+      delete manual.category;
+      payload.manual = { ...screen.txRef, manual };
+    }
+    commit(payload, "Rule saved", describeRule(rule, rupees), { pop: true });
   }
 
   // ---- Saving through Scriptable ----
@@ -1254,7 +1324,7 @@
     }
     const screen = top();
     state.previewLook = (screen && screen.newLook) || null;
-    const views = { tx: txView, list: listView, rule: ruleView, guessed: guessedView, unparsed: unparsedView, categories: categoriesView, category: categoryView, merge: mergeView,
+    const views = { tx: txView, "tx-category": txCategoryView, "tx-rule-picker": txRulePickerView, list: listView, rule: ruleView, guessed: guessedView, unparsed: unparsedView, categories: categoriesView, category: categoryView, merge: mergeView,
       accounts: accountsView, "add-bank": addBankView, bank: bankView, account: accountView, card: cardView };
     let body = screen ? views[screen.type](screen) : { spending: spendingView, trends: trendsView, rules: rulesView, more: moreView }[state.tab]();
     if (!screen && state.tab !== "rules" && state.tabHistory.length) body = `<div class="nav">${tabBack()}<span class="mid"></span><span class="end"></span></div>${body}`;
@@ -1326,9 +1396,24 @@
     "open-list": (el) => push({ type: "list", filter: el.dataset.filter }),
     "open-tx": (el) => {
       const tx = tag([findTx(el.dataset.ym, el.dataset.id)])[0];
-      push({ type: "tx", ym: el.dataset.ym, id: tx.id, draft: tx.category, always: false });
+      push({ type: "tx", ym: el.dataset.ym, id: tx.id });
     },
-    "pick-cat": (el) => { top().draft = el.dataset.value; render(); },
+    "change-tx-category": () => {
+      const s = top();
+      push({ type: "tx-category", ym: s.ym, id: s.id });
+    },
+    "choose-tx-category": (el) => chooseTxCategory(top(), el.dataset.value),
+    "new-rule-from-tx": () => {
+      const s = top();
+      const tx = tag([findTx(s.ym, s.id)])[0];
+      const rule = { when: { merchant: recipientPattern([tx.merchant], true) }, set: { category: tx.category } };
+      push({ type: "rule", index: null, txRef: { ym: s.ym, id: s.id }, ...fieldsFromRule(rule) });
+    },
+    "add-to-rule": () => {
+      const s = top();
+      push({ type: "tx-rule-picker", ym: s.ym, id: s.id });
+    },
+    "include-in-rule": (el) => includeTxInRule(top(), Number(el.dataset.i)),
     "pick-emoji": (el) => { top().newLook.emoji = el.dataset.value; top().lookTouched = true; top().emojiOpen = false; render(); },
     "any-emoji": () => {
       top().emojiOpen = true;
@@ -1380,8 +1465,6 @@
       render();
       window.scrollTo(0, 0);
     },
-    "toggle-always": () => { top().always = !top().always; render(); },
-    "save-tx": () => saveTx(top()),
     "tx-menu": () => { top().txMenu = !top().txMenu; render(); },
     "close-tx-menu": () => { top().txMenu = false; render(); },
     "mark-self": () => {

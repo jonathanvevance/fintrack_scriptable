@@ -20,11 +20,11 @@
   try {
     click('[data-act="open-list"][data-filter="all"]');
     click('[data-act="open-tx"]', /BIGBASKET/);
-    ok("normal transaction has Save and more menu", app.querySelector('[data-act="save-tx"]') && app.querySelector('[data-act="tx-menu"]'));
+    ok("normal transaction is read-only with more menu", !app.querySelector('[data-act="save-tx"]') && app.querySelector('[data-act="tx-menu"]'));
     ok("self-transfer action starts hidden", !app.querySelector('[data-act="mark-self"]'));
 
     click('[data-act="tx-menu"]');
-    ok("more menu marks self transfer", /Mark as Self Transfer Cancel/.test(text()), text().slice(0, 180));
+    ok("more menu has rare transaction actions", /Mark as Self Transfer/.test(text()) && /Delete Transaction/.test(text()) && /Cancel/.test(text()), text().slice(0, 260));
     click('[data-act="mark-self"]');
     ok("mark asks for confirmation", /Mark as Self Transfer\? It will not count as spending or money received/.test(text()), text().slice(-180));
     click('[data-act="mark-self-confirm"]');
@@ -44,7 +44,7 @@
     const unmarked = sent[sent.length - 1];
     ok("change to payment removes manual mark", unmarked.action === "save" && Object.keys(unmarked.manual.manual).length === 0, JSON.stringify(unmarked));
     click('[data-act="close"]');
-    ok("payment category picker returns", app.querySelector('[data-act="pick-cat"]') && !app.querySelector(".self-icon"));
+    ok("payment category control returns", app.querySelector('[data-act="change-tx-category"]') && !app.querySelector(".self-icon"));
   } catch (e) {
     out.push(`FAIL exception ${e.message} ${(e.stack || "").split("\n")[1]}`);
   }

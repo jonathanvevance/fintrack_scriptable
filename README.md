@@ -58,10 +58,10 @@ Push to `master`, then on the phone run `FinTrack Update` (or tap **More → Upd
 
 Tabs in `FinTrack`:
 
-- **Spending.** Swipe the month pills, or pick **All YYYY** for the whole year with a bar per month. Shows total spent, a **Received** line that opens what came in, spend per category and the latest transactions. Tap a transaction to set its category.
+- **Spending.** Swipe the month pills, or pick **All YYYY** for the whole year with a bar per month. Shows total spent, a **Received** line that opens what came in, spend per category and the latest transactions. Open a transaction to see the rule that categorized it and the original SMS. If it needs a category, choose one for that transaction and optionally add a new rule or extend an existing rule.
 - **Insights.** **Trends**: one category's line over 6 or 12 months against its average. **Recurring**: payments spotted automatically, coming up and paid this month. **Paid To**: bubbles sized by spend, for a month or a year.
 - **Rules.** Each rule is one sentence with its match count, such as "When I pay swiggy or zomato, it's 🍜 Food". Rules are checked top to bottom and the first match sets the category.
-  - **Add:** tap **＋**, or open a transaction, pick a category and turn on **Always**.
+  - **Add:** tap **＋**, or choose a category on a transaction and tap **Add a New Rule**.
   - **Edit:** tap a rule. Its sentence shows outlined parts (pay / receive money, names, amount, account, a word the SMS says, the category); tap one to change or remove it in a sheet, and add missing parts from **Add to the sentence**. A name matches part of the bank's name unless the rule says **exactly**.
   - **Reorder:** tap **⇅**, drag the **≡** handles, tap **⇅** again to save (or **Cancel**).
   - **Categories** (row at the top): every category, where you can rename one, change its icon, see and add the rules that set it, merge it into another or delete it. **New Category** takes a name, an emoji and a colour. The icon picker offers a few emoji that fit the name (Pets: 🐾 🐶 🐱 🦴 🐟), the emoji your categories already use, and **Any emoji…** for anything on the keyboard.

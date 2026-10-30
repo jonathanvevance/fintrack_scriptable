@@ -10,7 +10,7 @@ function load(path) {
 
 const { parseSms, parseDate } = load("lib/parse.js");
 const { money, shiftMonth, totals, categoryTotals, merchantTotals, recurringPayments } = load("lib/format.js");
-const { compileRules, tagsFor, tagAll, describeRule, patternWords, isPlainPattern, recipientPattern } = load("lib/tags.js");
+const { compileRules, tagsFor, ruleIndexFor, tagAll, describeRule, patternWords, isPlainPattern, recipientPattern } = load("lib/tags.js");
 const { checkAccounts, compileAccounts, accountLabel } = load("lib/accounts.js");
 const { annotateMonths, annotateTransaction, cleanCache, neededDates, pickRate, rateFor } = load("lib/exchange.js");
 
@@ -348,6 +348,9 @@ eq("first matching rule wins", tagsFor(compileRules([
 ]), tx({ merchant: "Amazon" })).category, "Shopping");
 eq("manual value beats rules", tagged({ merchant: "Swiggy", manual: { category: "Party" } }).category, "Party");
 eq("empty rules tag nothing", tagsFor(compileRules([]), tx({})), { category: null });
+eq("matching rule index is exposed", ruleIndexFor(rules, tx({ merchant: "SWIGGY" })), 1);
+eq("manual category has no applied rule", ruleIndexFor(rules, tx({ merchant: "SWIGGY", manual: { category: "Party" } })), null);
+eq("unmatched transaction has no applied rule", ruleIndexFor(rules, tx({ merchant: "UNKNOWN" })), null);
 eq("tagAll leaves stored list unchanged", (() => {
   const list = [tx({ merchant: "Zomato" })];
   return [tagAll(rules, list)[0].category, list[0].category];
