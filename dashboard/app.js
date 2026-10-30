@@ -10,7 +10,7 @@
 
 (function () {
   const { compileRules, tagsFor, tagAll, describeRule, ruleSentence, orList, patternWords, isPlainPattern, recipientPattern } = FT.tags;
-  const { money, monthLabel, shiftMonth, totals, categoryTotals, merchantTotals, recurringPayments } = FT.format;
+  const { money, monthLabel, shiftMonth, totals, categoryTotals, merchantTotals, recurringPayments, inrValue } = FT.format;
   const { checkAccounts, compileAccounts, accountLabel } = FT.accounts;
   const app = document.getElementById("app");
 
@@ -212,7 +212,8 @@
       const u = get(tx.category);
       u.tx++;
       if (tx.manual && tx.manual.category === tx.category) u.hand++;
-      if (tx.date.startsWith(state.ym) && tx.currency === "INR" && tx.amountPaise < 0) u.paise -= tx.amountPaise;
+      const amount = inrValue(tx);
+      if (tx.date.startsWith(state.ym) && amount != null && amount < 0) u.paise -= amount;
     }
     for (const name of Object.keys(state.categories)) get(name);
     return [...use.values()].sort((a, b) => b.tx - a.tx || a.name.localeCompare(b.name));
@@ -256,9 +257,10 @@
     const sub = tx.self ? "Self transfer" : tx.category ? esc(tx.category) : `<span class="warn">Needs a category</span>`;
     const where = [tx.bank, tx.account ? "··" + tx.account : null].filter(Boolean).join(" ");
     const day = Number(tx.date.slice(8));
+    const converted = tx.currency !== "INR" && Number.isFinite(tx.inrPaise) ? `≈ ${money(Math.abs(tx.inrPaise))} · ` : "";
     return `<button class="li" data-act="open-tx" data-ym="${esc(tx.date.slice(0, 7))}" data-id="${esc(tx.id)}">${tx.self ? selfIcon() : icon(tx.category)}
       <div class="main"><div class="t1">${esc(shortName(recipient(tx)))}</div><div class="t2">${sub}${where ? " · " + esc(where) : ""}</div></div>
-      <div class="amt ${tx.amountPaise > 0 ? "in" : ""}">${tx.amountPaise > 0 ? "+" : ""}${esc(money(Math.abs(tx.amountPaise), tx.currency))}<small>${day} ${esc(monthName(tx.date.slice(0, 7)))}</small></div></button>`;
+      <div class="amt ${tx.amountPaise > 0 ? "in" : ""}">${tx.amountPaise > 0 ? "+" : ""}${esc(money(Math.abs(tx.amountPaise), tx.currency))}<small>${esc(converted)}${day} ${esc(monthName(tx.date.slice(0, 7)))}</small></div></button>`;
   }
 
   function ring(cats) {
@@ -315,7 +317,10 @@
 
   function categoryRows(list) {
     const counts = new Map();
-    for (const tx of list) if (tx.currency === "INR" && tx.amountPaise < 0) counts.set(tx.category || null, (counts.get(tx.category || null) || 0) + 1);
+    for (const tx of list) {
+      const amount = inrValue(tx);
+      if (amount != null && amount < 0) counts.set(tx.category || null, (counts.get(tx.category || null) || 0) + 1);
+    }
     return categoryTotals(list)
       .map((c) => `<button class="li" data-act="open-list" data-filter="${esc(c.category || "untagged")}">${icon(c.category)}
         <div class="main"><div class="t1">${esc(c.category || "No Category")}</div><div class="t2">${plural(counts.get(c.category) || 0, "transaction")}</div></div>
@@ -337,7 +342,11 @@
       const diff = spent - before;
       note = before ? `${money(Math.abs(diff))} ${diff <= 0 ? "less" : "more"} than ${monthName(shiftMonth(state.ym, -1))}` : "";
     }
-    const foreign = Object.keys(t).filter((c) => c !== "INR").map((c) => `${money(t[c].out, c)}`);
+    const foreign = Object.keys(t).filter((c) => c !== "INR" && t[c].out).map((c) => `${money(t[c].out, c)}`);
+    const unavailable = list.filter((tx) => tx.currency !== "INR" && tx.amountPaise < 0 && !Number.isFinite(tx.inrPaise)).length;
+    const foreignNote = foreign.length
+      ? unavailable ? `${foreign.join(", ")} foreign · ${plural(unavailable, "rate")} unavailable` : `includes ${foreign.join(", ")} at date rates`
+      : "";
     const untagged = list.filter((tx) => !tx.category).length;
     const cats = categoryTotals(list);
 
@@ -346,7 +355,7 @@
       <div class="group pad" style="display:flex;align-items:center;gap:16px">${cats.length ? ring(cats) : ""}
         <div style="min-width:0"><div class="muted">Spent in ${esc(state.year || monthName(state.ym))}</div>
           <div class="big">${esc(money(spent))}</div>
-          <div class="muted small">${esc([note, foreign.length ? "also " + foreign.join(", ") : ""].filter(Boolean).join(" · ") || "\u00a0")}</div>
+          <div class="muted small">${esc([note, foreignNote].filter(Boolean).join(" · ") || "\u00a0")}</div>
           ${received ? `<button class="received" data-act="open-list" data-filter="received">Received <b class="in">${esc(money(received))}</b><span class="chev"></span></button>` : ""}</div></div>
       ${state.year ? `<div class="group pad"><div class="muted small">Each month · tap one to open it</div>${yearBars(state.year)}</div>` : ""}
       ${cats.length ? `<div class="sh">Categories</div><div class="group">${categoryRows(list)}</div>` : ""}
@@ -385,10 +394,14 @@
 
   function txHead(tx, iconHtml) {
     const when = `${Number(tx.date.slice(8))} ${monthLabel(tx.date.slice(0, 7))}`;
+    const converted = tx.currency !== "INR" && Number.isFinite(tx.inrPaise)
+      ? `<div class="muted">≈ ${esc(money(Math.abs(tx.inrPaise)))} at transaction-date rate</div>`
+      : tx.currency !== "INR" ? `<div class="muted warn">INR rate unavailable</div>` : "";
     return `<div style="text-align:center;padding:6px 16px 18px">${iconHtml}
         ${tx.merchant ? `<div class="muted small">${tx.amountPaise > 0 ? "Received from" : "Paid to"}</div>` : ""}
         <div style="font-size:22px;font-weight:700">${esc(recipient(tx))}</div>
         <div class="big ${tx.amountPaise > 0 && !tx.self ? "in" : ""}" style="font-size:40px">${esc(money(Math.abs(tx.amountPaise), tx.currency))}</div>
+        ${converted}
         <div class="muted">${esc([when, tx.bank, tx.account ? "··" + tx.account : null].filter(Boolean).join(" · "))}</div></div>`;
   }
 

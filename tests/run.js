@@ -12,6 +12,7 @@ const { parseSms, parseDate } = load("lib/parse.js");
 const { money, shiftMonth, totals, categoryTotals, merchantTotals, recurringPayments } = load("lib/format.js");
 const { compileRules, tagsFor, tagAll, describeRule, patternWords, isPlainPattern, recipientPattern } = load("lib/tags.js");
 const { checkAccounts, compileAccounts, accountLabel } = load("lib/accounts.js");
+const { annotateMonths, annotateTransaction, cleanCache, neededDates, pickRate, rateFor } = load("lib/exchange.js");
 
 let failures = 0;
 let count = 0;
@@ -268,6 +269,50 @@ eq(
     { currency: "USD", amountPaise: -50 },
   ]),
   { INR: { out: 100, in: 300, count: 2 }, USD: { out: 50, in: 0, count: 1 } }
+);
+eq(
+  "converted foreign spend joins INR total and keeps original currency",
+  totals([
+    { currency: "INR", amountPaise: -10000 },
+    { currency: "USD", amountPaise: -2000, inrPaise: -189860 },
+  ]),
+  { INR: { out: 199860, in: 0, count: 2 }, USD: { out: 2000, in: 0, count: 1 } }
+);
+eq(
+  "converted foreign spend joins category total",
+  categoryTotals([{ category: "Subscriptions", currency: "USD", amountPaise: -2000, inrPaise: -189860 }]),
+  [{ category: "Subscriptions", paise: 189860 }]
+);
+eq(
+  "converted foreign spend joins merchant total",
+  merchantTotals([{ merchant: "STREAMBOX", category: "Subscriptions", currency: "USD", amountPaise: -2000, inrPaise: -189860 }]),
+  [{ merchant: "STREAMBOX", paise: 189860, count: 1, category: "Subscriptions" }]
+);
+
+const RATE_CACHE = { version: 1, provider: "frankfurter", quote: "INR", rates: { USD: { "2026-10-16": 94.96, "2026-10-19": 94.93 } } };
+eq("exchange: exact date", rateFor(RATE_CACHE, "USD", "2026-10-19"), { rate: 94.93, date: "2026-10-19" });
+eq("exchange: offline uses nearest earlier rate", rateFor(RATE_CACHE, "USD", "2026-10-18"), { rate: 94.96, date: "2026-10-16" });
+eq("exchange: never uses a future rate", rateFor(RATE_CACHE, "USD", "2026-10-15"), null);
+eq("exchange: weekend API result uses Friday", pickRate({ "2026-10-16": { INR: 94.96 }, "2026-10-19": { INR: 94.93 } }, "2026-10-18"), 94.96);
+eq("exchange: bad cache becomes empty", cleanCache({ rates: { USD: {} } }), { version: 1, provider: "frankfurter", quote: "INR", rates: {} });
+eq(
+  "exchange: annotates without changing original amount",
+  annotateTransaction({ id: "usd", date: "2026-10-19", currency: "USD", amountPaise: -2000 }, RATE_CACHE),
+  { id: "usd", date: "2026-10-19", currency: "USD", amountPaise: -2000, inrPaise: -189860, exchangeRate: 94.93, exchangeRateDate: "2026-10-19" }
+);
+eq(
+  "exchange: annotates month map",
+  annotateMonths({ "2026-10": [{ date: "2026-10-19", currency: "USD", amountPaise: -100 }] }, RATE_CACHE),
+  { "2026-10": [{ date: "2026-10-19", currency: "USD", amountPaise: -100, inrPaise: -9493, exchangeRate: 94.93, exchangeRateDate: "2026-10-19" }] }
+);
+eq(
+  "exchange: only missing foreign dates need fetching",
+  Object.fromEntries(Object.entries(neededDates({ x: [
+    { date: "2026-10-19", currency: "USD" },
+    { date: "2026-10-20", currency: "USD" },
+    { date: "2026-10-20", currency: "INR" },
+  ] }, RATE_CACHE)).map(([currency, dates]) => [currency, [...dates]])),
+  { USD: ["2026-10-20"] }
 );
 
 const rules = compileRules(JSON.parse(readFile("rules.example.json")));

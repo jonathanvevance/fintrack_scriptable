@@ -9,6 +9,7 @@ const { recheck } = importModule("fintrack/lib/capture.js");
 const { money, monthLabel, totals } = importModule("fintrack/lib/format.js");
 const { openDashboard } = importModule("fintrack/lib/dashboard.js");
 const { compileAccounts } = importModule("fintrack/lib/accounts.js");
+const { annotateTransaction, cleanCache } = importModule("fintrack/lib/exchange.js");
 
 const RED = new Color("#d64545");
 const GREEN = new Color("#2e9e5b");
@@ -22,7 +23,13 @@ function currentMonth() {
 async function runWidget() {
   const ym = currentMonth();
   const isSelf = compileAccounts(await store.readAccounts());
-  const list = (await store.listMonth(ym)).filter((tx) => !isSelf(tx));
+  let rates;
+  try {
+    rates = cleanCache(await store.readExchangeRates());
+  } catch (_) {
+    rates = cleanCache(null);
+  }
+  const list = (await store.listMonth(ym)).filter((tx) => !isSelf(tx)).map((tx) => annotateTransaction(tx, rates));
   const inr = totals(list).INR || { out: 0, in: 0 };
   const w = new ListWidget();
   w.url = "scriptable:///run?scriptName=" + encodeURIComponent("FinTrack");

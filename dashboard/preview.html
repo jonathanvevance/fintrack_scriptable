@@ -61,7 +61,8 @@
       { id: "salary", date: "2026-10-14", merchant: "ACME TECH PVT LTD (CITI ··7788)", bank: "HSBC", account: "001", currency: "INR", amountPaise: 15000000, template: "hsbc-neft-in", confidence: "high",
         raw: "HSBC: A/c 000000***-001 is credited with INR 1,50,000.00 + on 14OCT at 12.35.54 with UTR CITIN00000000001 as NEFT from CITI A/c ***7788 of ACME TECH PVT LTD*** . Your Avl Bal is INR 2,00,000.00.", capturedAt: "2026-10-14T10:00:00Z" });
     if (back === 0) list.push({ id: "usd", date: "2026-10-19", merchant: "OPENAI *CHATGPT", bank: "HSBC", account: "1234", currency: "USD",
-      amountPaise: -2000, template: "hsbc-cc-spend", confidence: "high", raw: "HSBC Credit Card used at OPENAI", capturedAt: "2026-10-19T10:00:00Z" });
+      amountPaise: -2000, inrPaise: -189860, exchangeRate: 94.93, exchangeRateDate: "2026-10-19",
+      template: "hsbc-cc-spend", confidence: "high", raw: "HSBC Credit Card used at OPENAI", capturedAt: "2026-10-19T10:00:00Z" });
     months[ym] = list.sort((a, b) => (a.date < b.date ? 1 : -1));
   }
   const rules = [

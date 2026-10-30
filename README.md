@@ -2,7 +2,7 @@
 
 Private household money tracking on iPhone, built on [Scriptable](https://scriptable.app). Bank SMS become transactions; rules put them in categories; a dashboard shows spending, trends and recurring payments. India: INR, Indian banks, UPI.
 
-- No third party sees the data: no bank logins, no account aggregator, no server, no network calls except `FinTrack Update` downloading code from this repo.
+- No third party sees transaction data: no bank logins, no account aggregator and no server. Network calls download code from this repo and ask Frankfurter for exchange rates using only currency codes and date ranges.
 - **Code lives here; data never does.** All data is JSON in Scriptable's iCloud folder on the phone, under `fintrack/data/`.
 
 ## Screenshots
@@ -79,15 +79,16 @@ Tabs in `FinTrack`:
 - For a rare case the app cannot detect, open the transaction, tap **••• → Mark as Self Transfer**. This changes only that transaction and can be changed back to a payment.
 - Self transfers are left out of every total, category, Insights view and the widget. They still appear in See All with a swap-arrows icon, and opening one says why it matched.
 
-Foreign-currency card spends are kept separate from the INR total.
+Foreign-currency spends use [Frankfurter](https://frankfurter.dev/) reference rates from the transaction date and join INR totals, categories and Insights as estimates. The original amount stays visible beside its INR estimate. Rates are cached permanently for offline use; when no rate is available, the foreign amount stays separate and the UI says so. Reference rates can differ from the card issuer's final INR charge because of settlement timing, fees and markup.
 
 ## How it works
 
 1. **Capture.** A Shortcuts automation passes the SMS text to `FinTrack SMS`, which calls `lib/capture.js`: `lib/parse.js` turns it into a transaction, `lib/store.js` saves it in that month's file. The same SMS text within 2 minutes is a duplicate (two automations matched it). If saving fails, the SMS is kept in `fintrack-pending.json` (Scriptable's local folder) and saved the next time `FinTrack` opens.
 2. **Parse.** `parseSms` tries each template in `TEMPLATES` (exact bank wordings, `confidence: "high"`), then a generic parser (`confidence: "low"`, shown as "check"). Messages that are not transactions (OTPs, reminders, future debits) are ignored; ones it can't read go to Unrecognised Messages. Each time `FinTrack` opens, it re-parses the current month's low-confidence transactions, so a new template fixes old entries.
-3. **Tag.** On display, `lib/tags.js` gives each transaction a category (a category set by hand beats rules), and `lib/accounts.js` marks self transfers, which get no category. Stored transactions are never rewritten by rules.
-4. **Show.** `FinTrack` (`lib/dashboard.js`) opens `dashboard/` in a WebView, with every month, the rules, categories, accounts and unrecognised messages handed in directly. `lib/tags.js`, `lib/format.js` and `lib/accounts.js` are inlined into the page as `FT.tags`, `FT.format` and `FT.accounts`, so the page and Scriptable use the same code.
-5. **Save.** The page cannot write files. It asks Scriptable by navigating to `fintrack://do?data=<{ action, ... }>`; Scriptable cancels the navigation, validates the request, writes the file and replies through `fintrack.reply(result)`. Saved changes show an alert with **Undo**.
+3. **Convert.** Before the dashboard opens, `lib/exchange.js` asks Frankfurter for missing transaction-date rates and caches them. Requests contain only three-letter currency codes and date ranges. Weekends use the latest prior working-day rate; offline runs use the latest suitable cached rate.
+4. **Tag.** On display, `lib/tags.js` gives each transaction a category (a category set by hand beats rules), and `lib/accounts.js` marks self transfers, which get no category. Stored transactions are never rewritten by rules.
+5. **Show.** `FinTrack` (`lib/dashboard.js`) opens `dashboard/` in a WebView, with every month, the rules, categories, accounts and unrecognised messages handed in directly. `lib/tags.js`, `lib/format.js` and `lib/accounts.js` are inlined into the page as `FT.tags`, `FT.format` and `FT.accounts`, so the page and Scriptable use the same code.
+6. **Save.** The page cannot write files. It asks Scriptable by navigating to `fintrack://do?data=<{ action, ... }>`; Scriptable cancels the navigation, validates the request, writes the file and replies through `fintrack.reply(result)`. Saved changes show an alert with **Undo**.
 
 ## Code map
 
@@ -102,7 +103,8 @@ Foreign-currency card spends are kept separate from the INR total.
 | `lib/store.js` | Reading and writing everything under `fintrack/data/`, duplicate check, pending file, corrupt-file handling. |
 | `lib/tags.js` | Rule format, `compileRules`, `tagsFor` / `tagAll`, rule sentences (`ruleSentence`, `describeRule`). |
 | `lib/accounts.js` | My Accounts format, `checkAccounts`, `compileAccounts` (self-transfer matcher), card bill-paid templates. |
-| `lib/format.js` | Money (Indian digit grouping), dates, month labels. |
+| `lib/exchange.js` | Fetches missing transaction-date rates from Frankfurter, applies cached INR estimates without changing stored transactions. |
+| `lib/format.js` | Money (Indian digit grouping), dates, month labels and totals using available INR estimates. |
 | `lib/dashboard.js` | Builds the page, runs the WebView, handles the page's requests. |
 | `dashboard/app.js` | The whole UI: state, views per screen, actions, drag to reorder. Plain JavaScript, no framework. |
 | `dashboard/style.css` | iOS-style look. |
@@ -122,6 +124,7 @@ All under `fintrack/data/` in Scriptable's iCloud folder. Written only by Script
 | `rules.json` | Array of rules: `{ "when": { … }, "set": { "category": "Food" } }`. Conditions: `merchant` and `text` (regex, any case), `direction` (`"in"` / `"out"`), `minAmount` / `maxAmount` (rupees), `account`, `bank`, `template`, `currency`. All must hold. Format in `lib/tags.js`. |
 | `categories.json` | `{ "Food": { "emoji": "🍜", "colour": "#ff9500" }, … }`. Categories without an entry get a look suggested from their name. |
 | `accounts.json` | `[{ "bank": "HSBC", "account": { "last4", "name", "upi": [], "names": [] } or null, "cards": [{ "last4", "name", "bills": [] }] }]`. Format in `lib/accounts.js`. |
+| `exchange-rates.json` | `{ "version": 1, "provider": "frankfurter", "quote": "INR", "rates": { "USD": { "2026-10-19": 94.93 } } }`. Contains no transaction data. |
 | `unparsed.json` | SMS that no template or the generic parser could read. |
 
 A transaction:
@@ -169,7 +172,7 @@ Templates in `lib/parse.js` (`TEMPLATES`, tried in order; the id is saved as `te
 | `hdfc-cc-payment` | HDFC card payment received (self transfer) |
 | `generic` | Anything else with an amount and debited / credited / spent / paid / received; `confidence: "low"` |
 
-**Adding a template:** copy the SMS from **More → Unrecognised Messages** (tap it, or **Copy All for Review**), replace every number and name with made-up ones, add a template to `TEMPLATES` before `generic` and a case to `tests/run.js`. A bill-paid template also goes in `CARD_BILL_TEMPLATES` in `lib/accounts.js`. Dates without a year ("26OCT") take the year from when the SMS arrived.
+**Adding a template:** use **More → Messages FinTrack Missed** or **Copy Everything for Code Editor**, replace every number and name with made-up ones, add a template to `TEMPLATES` before `generic` and a case to `tests/run.js`. A bill-paid template also goes in `CARD_BILL_TEMPLATES` in `lib/accounts.js`. Dates without a year ("26OCT") take the year from when the SMS arrived.
 
 ## Project rules
 
