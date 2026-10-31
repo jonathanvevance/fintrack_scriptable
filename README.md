@@ -59,7 +59,7 @@ Push to `master`, then on the phone run `FinTrack Update` (or tap **More → App
 Tabs in `FinTrack`:
 
 - **Spending.** Swipe the month pills, or pick **All YYYY** for the whole year with a bar per month. Shows total spent, a **Received** line that opens what came in, spend per category and the latest transactions. Open a transaction to see the rule that categorized it and the original SMS. If it needs a category, choose one for that transaction and optionally add a new rule or extend an existing rule.
-  - For a payment you will split with other people, open it and tap **Split Transaction**. Choose **Even** and type the number of people including you, or choose **Uneven** and enter only your share. Your share keeps the chosen category; the rest goes to **Lent**. The bank payment and total spending stay unchanged.
+  - For a payment you will split with other people, open it and tap **Split Transaction**. **Evenly** takes the number of people including you. **By shares** takes your shares and everyone else's shares (2 and 3 makes your part 2/5). **By amount** takes your exact amount. Your part keeps the chosen category; the rest goes to **Lent**. The bank payment and total spending stay unchanged.
 - **Insights.** **Trends**: one category's line over 6 or 12 months against its average. **Recurring**: payments spotted automatically, coming up and paid this month. **Paid To**: bubbles sized by spend, for a month or a year.
 - **Rules.** Each rule is one sentence with its match count, such as "When I pay swiggy or zomato, it's 🍜 Food". Rules are checked top to bottom and the first match sets the category.
   - **Add:** tap **＋**, or choose a category on a transaction and tap **Add a New Rule**.

@@ -39,6 +39,9 @@
       /Message Review/.test(text()) && /App & Updates/.test(text()) && !/Check Guessed Transactions/.test(text()), text());
     click('[data-act="new-manual"]');
     ok("manual form supports paid and received", /New Transaction/.test(text()) && /Paid/.test(text()) && /Received/.test(text()), text());
+    const dateStyle = getComputedStyle(q('[data-field="date"]'));
+    ok("manual date is right aligned", dateStyle.textAlign === "right" && dateStyle.maxWidth !== "none",
+      `${dateStyle.textAlign} / ${dateStyle.maxWidth}`);
     type("amount", "1234.56");
     type("merchant", "Local Store");
     type("date", "2026-10-29");
@@ -68,12 +71,27 @@
     ok("detail shows both parts", /Shopping Your share ₹20,000/.test(text()) && /Lent To get back ₹80,000/.test(text()), text());
 
     click('[data-act="open-split"]');
-    click('[data-act="split-mode"][data-value="uneven"]');
+    ok("split labels use approved wording", /Evenly/.test(text()) && /By shares/.test(text()) && /By amount/.test(text()) &&
+      !/Your fraction/.test(text()), text());
+    click('[data-act="split-mode"][data-value="shares"]');
+    type("ownShares", "2");
+    type("otherShares", "3");
+    ok("share split calculates two fifths without showing a fraction row",
+      /Your share ₹40,000/.test(text()) && /To get back ₹60,000/.test(text()) && !/Your fraction/.test(text()), text());
+    click('[data-act="save-split"]');
+    const shares = sent[sent.length - 1];
+    ok("share split stores both share counts", shares.manual.manual.split.mode === "shares" &&
+      shares.manual.manual.split.ownShares === 2 && shares.manual.manual.split.otherShares === 3 &&
+      shares.manual.manual.split.ownPaise === 4000000, JSON.stringify(shares));
+    await wait(250);
+
+    click('[data-act="open-split"]');
+    click('[data-act="split-mode"][data-value="amount"]');
     type("ownAmount", "35000");
     click('[data-act="save-split"]');
-    const uneven = sent[sent.length - 1];
-    ok("uneven split stores only own share", uneven.manual.manual.split.mode === "uneven" &&
-      uneven.manual.manual.split.ownPaise === 3500000 && !("people" in uneven.manual.manual.split), JSON.stringify(uneven));
+    const amount = sent[sent.length - 1];
+    ok("amount split stores only own amount", amount.manual.manual.split.mode === "amount" &&
+      amount.manual.manual.split.ownPaise === 3500000 && !("people" in amount.manual.manual.split), JSON.stringify(amount));
     await wait(250);
     click('[data-act="open-split"]');
     click('[data-act="remove-split"]');

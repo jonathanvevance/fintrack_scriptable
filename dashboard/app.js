@@ -490,7 +490,8 @@
       : "";
     const splitSection = tx.amountPaise < 0
       ? `<div class="sh">Split</div><div class="group"><button class="li plain" data-act="open-split"><div class="main">
-          <div class="t1">${split ? split.mode === "even" ? `Even · ${split.people} people` : "Uneven" : "Split Transaction"}</div>
+          <div class="t1">${split ? split.mode === "even" ? `Evenly · ${split.people} people` :
+            split.mode === "shares" ? `By shares · ${split.ownShares} + ${split.otherShares}` : "By amount" : "Split Transaction"}</div>
           <div class="t2">${split ? "Tap to change or remove the split" : "Separate your share from what others owe"}</div>
           </div><span class="chev"></span></button></div>`
       : "";
@@ -599,26 +600,39 @@
   function splitValues(screen, tx) {
     const total = Math.abs(tx.amountPaise);
     const people = Number(screen.people);
+    const ownShares = Number(screen.ownShares);
+    const otherShares = Number(screen.otherShares);
     const ownPaise = screen.mode === "even"
       ? Number.isInteger(people) && people >= 2 ? Math.round(total / people) : null
-      : paiseInput(screen.ownAmount);
-    return { total, people, ownPaise, lentPaise: ownPaise == null ? null : total - ownPaise };
+      : screen.mode === "shares"
+        ? Number.isInteger(ownShares) && ownShares > 0 && Number.isInteger(otherShares) && otherShares > 0
+          ? Math.round((total * ownShares) / (ownShares + otherShares))
+          : null
+        : paiseInput(screen.ownAmount);
+    return { total, people, ownShares, otherShares, ownPaise, lentPaise: ownPaise == null ? null : total - ownPaise };
   }
 
   function splitView(screen) {
     const tx = tag([findTx(screen.ym, screen.id)])[0];
-    const { total, people, ownPaise, lentPaise } = splitValues(screen, tx);
-    const valid = ownPaise != null && ownPaise > 0 && ownPaise < total && (screen.mode !== "even" || (Number.isInteger(people) && people >= 2));
+    const { total, people, ownShares, otherShares, ownPaise, lentPaise } = splitValues(screen, tx);
+    const validEven = screen.mode !== "even" || (Number.isInteger(people) && people >= 2);
+    const validShares = screen.mode !== "shares" ||
+      (Number.isInteger(ownShares) && ownShares > 0 && Number.isInteger(otherShares) && otherShares > 0);
+    const valid = ownPaise != null && ownPaise > 0 && ownPaise < total && validEven && validShares;
     const amount = (value) => value == null || value < 0 ? "—" : money(value, tx.currency);
-    const mode = `<div class="seg wide" style="margin-top:8px">${["even", "uneven"].map((value) =>
-      `<button data-act="split-mode" data-value="${value}" class="${screen.mode === value ? "on" : ""}">${value === "even" ? "Even" : "Uneven"}</button>`).join("")}</div>`;
+    const labels = { even: "Evenly", shares: "By shares", amount: "By amount" };
+    const mode = `<div class="seg wide" style="margin-top:8px">${["even", "shares", "amount"].map((value) =>
+      `<button data-act="split-mode" data-value="${value}" class="${screen.mode === value ? "on" : ""}">${labels[value]}</button>`).join("")}</div>`;
     const input = screen.mode === "even"
       ? `<div class="li plain"><span>People, including you</span><input data-field="people" value="${esc(screen.people)}" inputmode="numeric" pattern="[0-9]*" placeholder="2 or more"></div>`
-      : `<div class="li plain"><span>Your share</span><input data-field="ownAmount" value="${esc(screen.ownAmount)}" inputmode="decimal" placeholder="0"></div>`;
+      : screen.mode === "shares"
+        ? `<div class="li plain"><span>Your shares</span><input data-field="ownShares" value="${esc(screen.ownShares)}" inputmode="numeric" pattern="[0-9]*" placeholder="1"></div>
+          <div class="li plain"><span>Others' shares</span><input data-field="otherShares" value="${esc(screen.otherShares)}" inputmode="numeric" pattern="[0-9]*" placeholder="1"></div>`
+        : `<div class="li plain"><span>Your amount</span><input data-field="ownAmount" value="${esc(screen.ownAmount)}" inputmode="decimal" placeholder="0"></div>`;
     return `<div class="nav"><button data-act="back">Cancel</button><span class="mid">Split Transaction</span><button class="end" data-act="save-split"><b>Save</b></button></div>
       <div class="group" style="margin-top:8px"><div class="li plain"><div class="main"><div class="t1">${esc(recipient(tx))}</div></div><span class="val">${esc(money(total, tx.currency))}</span></div></div>
       ${mode}
-      <div class="sh">${screen.mode === "even" ? "Even split" : "Uneven split"}</div>
+      <div class="sh">Split details</div>
       <div class="group">${input}
         <div class="li plain"><div class="main"><div class="t1">Your share</div></div><span class="val">${esc(amount(ownPaise))}</span></div>
         <div class="li plain"><div class="main"><div class="t1">To get back</div></div><span class="val">${esc(amount(lentPaise))}</span></div></div>
@@ -627,7 +641,8 @@
         <button class="li" data-act="pick-split-category" data-target="lentCategory">${icon(screen.lentCategory, "sq")}<div class="main"><div class="t1">To get back</div></div><span class="val">${esc(screen.lentCategory)}</span><span class="chev"></span></button></div>
       <div class="sf">The bank transaction stays ${esc(money(total, tx.currency))}. FinTrack divides only its category totals.</div>
       ${screen.editing ? `<div class="group"><button class="li plain" data-act="remove-split"><span class="danger">Remove Split</span></button></div>` : ""}
-      ${valid ? "" : `<div class="sf danger">Enter ${screen.mode === "even" ? "a whole number of 2 or more" : "your positive share below the total"}.</div>`}`;
+      ${valid ? "" : `<div class="sf danger">Enter ${screen.mode === "even" ? "a whole number of 2 or more" :
+        screen.mode === "shares" ? "positive whole shares for you and others" : "your positive amount below the total"}.</div>`}`;
   }
 
   function splitCategoryPickerView(screen) {
@@ -641,8 +656,11 @@
 
   function saveSplit(screen) {
     const tx = findTx(screen.ym, screen.id);
-    const { people, ownPaise, total } = splitValues(screen, tx);
+    const { people, ownShares, otherShares, ownPaise, total } = splitValues(screen, tx);
     if (screen.mode === "even" && (!Number.isInteger(people) || people < 2)) return showDialog("People needed", "Enter a positive whole number of 2 or more.");
+    if (screen.mode === "shares" && (!Number.isInteger(ownShares) || ownShares <= 0 || !Number.isInteger(otherShares) || otherShares <= 0)) {
+      return showDialog("Shares needed", "Enter positive whole shares for you and for everyone else.");
+    }
     if (ownPaise == null || ownPaise <= 0 || ownPaise >= total) return showDialog("Share needed", "Your share must be positive and less than the transaction total.");
     if (!screen.ownCategory || !screen.lentCategory) return showDialog("Categories needed", "Choose a category for both parts.");
     const manual = {
@@ -650,6 +668,7 @@
       split: {
         mode: screen.mode,
         ...(screen.mode === "even" ? { people } : {}),
+        ...(screen.mode === "shares" ? { ownShares, otherShares } : {}),
         ownPaise,
         ownCategory: screen.ownCategory,
         lentCategory: screen.lentCategory,
@@ -1653,8 +1672,10 @@
         type: "split",
         ym,
         id,
-        mode: split ? split.mode : "even",
+        mode: split ? split.mode === "uneven" ? "amount" : split.mode : "even",
         people: split && split.people ? String(split.people) : "5",
+        ownShares: split && split.ownShares ? String(split.ownShares) : "2",
+        otherShares: split && split.otherShares ? String(split.otherShares) : "3",
         ownAmount: split ? String(split.ownPaise / 100) : String(Math.round(total / 5) / 100),
         ownCategory: split ? split.ownCategory : (tagged.category || ""),
         lentCategory: split ? split.lentCategory : "Lent",
