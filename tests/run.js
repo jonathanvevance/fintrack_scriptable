@@ -58,6 +58,12 @@ const cases = [
     expect: { template: "sbi-upi-debit", bank: "SBI", accountType: "bank", account: "4321", merchant: "Swiggy", currency: "INR", amountPaise: -4550, date: "2026-11-03" },
   },
   {
+    name: "SBI incoming account transfer",
+    sms: "Dear SBI User, your A/c X4321-credited by Rs.12,500.75 on 31Oct26 transfer from PRIYA SHARMA Ref No 631234567890 -SBI",
+    keys: KEYS.concat(["ref"]),
+    expect: { template: "sbi-transfer-in", bank: "SBI", accountType: "bank", account: "4321", merchant: "PRIYA SHARMA", currency: "INR", amountPaise: 1250075, date: "2026-10-31", ref: "631234567890" },
+  },
+  {
     name: "ICICI UPI debit",
     sms: "ICICI Bank Acct XX246 debited for Rs 1.00 on 27-Oct-26; PRIYA NAIR credited. UPI:630012345678. Call 18002662 for dispute. SMS BLOCK 246 to 9215676766",
     expect: { template: "icici-upi-debit", bank: "ICICI", accountType: "bank", account: "246", merchant: "PRIYA NAIR", currency: "INR", amountPaise: -100, date: "2026-10-27" },
