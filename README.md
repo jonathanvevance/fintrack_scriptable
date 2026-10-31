@@ -41,24 +41,25 @@ Library code goes to `fintrack/lib/` and the dashboard to `fintrack/dashboard/` 
 ## One-time iPhone setup
 
 1. **Install.** In Safari on the iPhone, open [`scripts/FinTrack Update.js` (raw)](https://raw.githubusercontent.com/jonathanvevance/fintrack_scriptable/master/scripts/FinTrack%20Update.js), select all, copy. In Scriptable tap **+**, paste, rename the script to exactly `FinTrack Update`, tap **Done**, then run it. `FinTrack` and `FinTrack SMS` appear in the list.
-2. **Try it.** Copy any bank SMS from Messages, run `FinTrack`, go to **More** and tap **Add SMS from Clipboard**.
+2. **Try it.** Copy any bank SMS from Messages, run `FinTrack`, go to **More** and tap **Import from Clipboard**.
 3. **Automate.** Shortcuts → **Automation** → **+** → **Message**:
    - **Message Contains**: `debited` (leave Sender empty) → **Run Immediately** → **Next**.
    - **New Blank Automation** → add action **Scriptable → Run Script** → Script: `FinTrack SMS`.
    - Tap **Parameter** → **Shortcut Input**, then tap the inserted variable and choose **Content**. Leave **Run In App** off.
    - Repeat for `credited`, `spent` (SBI card), `used at` (HSBC card) and `paid from` (HSBC UPI payments). One keyword per automation. An SMS that matches two of them is saved once.
-   - If an automation sometimes doesn't fire, check that iOS isn't filtering bank senders (Settings → Apps → Messages → Unknown Senders). Missed SMS can always be added with **More → Add SMS from Clipboard**.
+   - If an automation sometimes doesn't fire, check that iOS isn't filtering bank senders (Settings → Apps → Messages → Unknown Senders). Missed SMS can always be added with **More → Import from Clipboard**.
 4. **Widget (optional).** Add a Scriptable widget to the Home Screen, long-press → **Edit Widget** → Script: `FinTrack`.
 
 ## Updating
 
-Push to `master`, then on the phone run `FinTrack Update` (or tap **More → Update FinTrack** in `FinTrack`).
+Push to `master`, then on the phone run `FinTrack Update` (or tap **More → App & Updates → Update FinTrack** in `FinTrack`).
 
 ## Using it
 
 Tabs in `FinTrack`:
 
 - **Spending.** Swipe the month pills, or pick **All YYYY** for the whole year with a bar per month. Shows total spent, a **Received** line that opens what came in, spend per category and the latest transactions. Open a transaction to see the rule that categorized it and the original SMS. If it needs a category, choose one for that transaction and optionally add a new rule or extend an existing rule.
+  - For a payment you will split with other people, open it and tap **Split Transaction**. Choose **Even** and type the number of people including you, or choose **Uneven** and enter only your share. Your share keeps the chosen category; the rest goes to **Lent**. The bank payment and total spending stay unchanged.
 - **Insights.** **Trends**: one category's line over 6 or 12 months against its average. **Recurring**: payments spotted automatically, coming up and paid this month. **Paid To**: bubbles sized by spend, for a month or a year.
 - **Rules.** Each rule is one sentence with its match count, such as "When I pay swiggy or zomato, it's 🍜 Food". Rules are checked top to bottom and the first match sets the category.
   - **Add:** tap **＋**, or choose a category on a transaction and tap **Add a New Rule**.
@@ -66,10 +67,10 @@ Tabs in `FinTrack`:
   - **Reorder:** tap **⇅**, drag the **≡** handles, tap **⇅** again to save (or **Cancel**).
   - **Categories** (row at the top): every category, where you can rename one, change its icon, see and add the rules that set it, merge it into another or delete it. **New Category** takes a name, an emoji and a colour. The icon picker offers a few emoji that fit the name (Pets: 🐾 🐶 🐱 🦴 🐟), the emoji your categories already use, and **Any emoji…** for anything on the keyboard.
   - A catch-all rule such as "When I receive money, it's Received" works if it is the last rule.
-- **More.** My Accounts, Add SMS from Clipboard, parser review, Update FinTrack, version.
-  - **Check Guessed Transactions:** general-parser guesses already included in totals. Copy the exact SMS for parser work, or mark a correct guess so it leaves the queue.
-  - **Messages FinTrack Missed:** messages not included in totals. Copy one or all exact SMS messages to add support in the code editor.
-  - **Copy Everything for Code Editor:** copies both queues with labels around the unchanged SMS text.
+- **More.** **Add Transaction** records a payment or receipt without an SMS; **Import from Clipboard** reads a copied bank SMS. My Accounts, Message Review and App & Updates each open their own small menu.
+  - **Message Review → Check Guessed Transactions:** general-parser guesses already included in totals. Copy the exact SMS for parser work, or mark a correct guess so it leaves the queue.
+  - **Message Review → Messages FinTrack Missed:** messages not included in totals. Copy one or all exact SMS messages to add support in the code editor.
+  - **Message Review → Copy Everything for Code Editor:** copies both queues with labels around the unchanged SMS text.
 
 **Self transfers** move money between your own accounts, so they count as neither spent nor received. List your banks under **More → My Accounts**: one row per bank; a bank's page lists its account (optional) and its cards, each with its own page.
 
@@ -83,7 +84,7 @@ Foreign-currency spends use [Frankfurter](https://frankfurter.dev/) reference ra
 
 ## How it works
 
-1. **Capture.** A Shortcuts automation passes the SMS text to `FinTrack SMS`, which calls `lib/capture.js`: `lib/parse.js` turns it into a transaction, `lib/store.js` saves it in that month's file. The same SMS text within 2 minutes is a duplicate (two automations matched it). If saving fails, the SMS is kept in `fintrack-pending.json` (Scriptable's local folder) and saved the next time `FinTrack` opens.
+1. **Capture.** A Shortcuts automation passes the SMS text to `FinTrack SMS`, which calls `lib/capture.js`: `lib/parse.js` turns it into a transaction, `lib/store.js` saves it in that month's file. The same SMS text within 2 minutes is a duplicate (two automations matched it). If saving fails, the SMS is kept in `fintrack-pending.json` (Scriptable's local folder) and saved the next time `FinTrack` opens. Transactions entered under **More → Add Transaction** go straight to the same local monthly file and contain no fake SMS.
 2. **Parse.** `parseSms` tries each template in `TEMPLATES` (exact bank wordings, `confidence: "high"`), then a generic parser (`confidence: "low"`, shown as "check"). Messages that are not transactions (OTPs, reminders, future debits) are ignored; ones it can't read go to Unrecognised Messages. Each time `FinTrack` opens, it re-parses the current month's low-confidence transactions, so a new template fixes old entries.
 3. **Convert.** Before the dashboard opens, `lib/exchange.js` asks Frankfurter for missing transaction-date rates and caches them. Requests contain only three-letter currency codes and date ranges. Weekends use the latest prior working-day rate; offline runs use the latest suitable cached rate.
 4. **Tag.** On display, `lib/tags.js` gives each transaction a category (a category set by hand beats rules), and `lib/accounts.js` marks self transfers, which get no category. Stored transactions are never rewritten by rules.
@@ -99,7 +100,7 @@ Foreign-currency spends use [Frankfurter](https://frankfurter.dev/) reference ra
 | `scripts/FinTrack Update.js` | Self-updating installer; writes only the files in `manifest.json`. |
 | `manifest.json` | Files `FinTrack Update` installs. Add new files here. |
 | `lib/parse.js` | SMS → transaction. `TEMPLATES` (one per bank wording), the generic parser, date and amount parsing. No Scriptable APIs. |
-| `lib/capture.js` | `capture(sms)` and `recheck(ym)`, shared by `FinTrack SMS` and Add SMS from Clipboard. |
+| `lib/capture.js` | `capture(sms)` and `recheck(ym)`, shared by `FinTrack SMS` and Import from Clipboard. |
 | `lib/store.js` | Reading and writing everything under `fintrack/data/`, duplicate check, pending file, corrupt-file handling. |
 | `lib/tags.js` | Rule format, `compileRules`, `tagsFor` / `tagAll`, rule sentences (`ruleSentence`, `describeRule`). |
 | `lib/accounts.js` | My Accounts format, `checkAccounts`, `compileAccounts` (self-transfer matcher), card bill-paid templates. |
@@ -145,11 +146,20 @@ A transaction:
   "ref": "630012345678",
   "raw": "the SMS text",
   "capturedAt": "2026-10-27T09:15:00.000Z",
-  "manual": { "category": "Food" }
+  "manual": {
+    "category": "Food",
+    "split": {
+      "mode": "even",
+      "people": 5,
+      "ownPaise": 5000,
+      "ownCategory": "Food",
+      "lentCategory": "Lent"
+    }
+  }
 }
 ```
 
-Money is integer paise; negative is money out. `manual` holds what was set by hand and is optional. Six categories are always offered: Food, Groceries, Shopping, Travel, Bills, Subscriptions.
+Money is integer paise; negative is money out. `manual` holds what was set by hand and is optional. A manual transaction has `template: "manual"`, `raw: null` and may have a note. A split is also optional; it divides only category totals, not the stored bank amount. Common categories plus **Lent** are always offered.
 
 ## Supported SMS
 
@@ -173,7 +183,7 @@ Templates in `lib/parse.js` (`TEMPLATES`, tried in order; the id is saved as `te
 | `hdfc-cc-payment` | HDFC card payment received (self transfer) |
 | `generic` | Anything else with an amount and debited / credited / spent / paid / received; `confidence: "low"` |
 
-**Adding a template:** use **More → Messages FinTrack Missed** or **Copy Everything for Code Editor**, replace every number and name with made-up ones, add a template to `TEMPLATES` before `generic` and a case to `tests/run.js`. A bill-paid template also goes in `CARD_BILL_TEMPLATES` in `lib/accounts.js`. Dates without a year ("26OCT") take the year from when the SMS arrived.
+**Adding a template:** use **More → Message Review → Messages FinTrack Missed** or **Copy Everything for Code Editor**, replace every number and name with made-up ones, add a template to `TEMPLATES` before `generic` and a case to `tests/run.js`. A bill-paid template also goes in `CARD_BILL_TEMPLATES` in `lib/accounts.js`. Dates without a year ("26OCT") take the year from when the SMS arrived.
 
 ## Project rules
 

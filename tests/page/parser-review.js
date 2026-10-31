@@ -30,6 +30,8 @@
     fintrack.load({ months, rules, categories: {}, accounts, unparsed, version: "preview", currentMonth: "2026-10" });
 
     click('[data-act="tab"][data-value="more"]');
+    ok("More keeps review inside one menu", !!app.querySelector('[data-act="open-review-hub"]') && !app.querySelector('[data-act="open-guessed"]'), text());
+    click('[data-act="open-review-hub"]');
     const moreRows = [...app.querySelectorAll(".group .li")].map((row) => plainText(row.innerText));
     ok("More explains guessed transactions affect totals", moreRows.some((row) => /Check Guessed Transactions Already included in your totals 1/.test(row)), moreRows.join(" | "));
     ok("More explains missed messages do not affect totals", moreRows.some((row) => /Messages FinTrack Missed Not included in your totals 1/.test(row)), moreRows.join(" | "));

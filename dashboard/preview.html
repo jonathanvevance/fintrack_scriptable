@@ -82,6 +82,22 @@
   ];
   fintrack.send = (message) => {
     console.log("[preview] Scriptable would run:", JSON.stringify(message, null, 1));
+    if (message.action === "addManual") {
+      const ym = message.date.slice(0, 7);
+      const id = `manual-preview-${Date.now()}`;
+      const tx = {
+        id, template: "manual", confidence: "high", bank: message.bank, accountType: message.accountType,
+        account: message.account, merchant: message.merchant, currency: "INR",
+        amountPaise: message.direction === "out" ? -message.amountPaise : message.amountPaise,
+        date: message.date, raw: null, note: message.note || null, capturedAt: new Date().toISOString(),
+        manual: { category: message.category },
+      };
+      months[ym] = [tx, ...(months[ym] || [])];
+      return setTimeout(() => fintrack.reply({
+        ok: true, title: "Added", message: "", ym, id,
+        data: { months, rules, categories: { Transfers: { emoji: "↔︎", colour: "#8e8e93" } }, accounts, unparsed, version: "preview · fake data", currentMonth: ym },
+      }), 150);
+    }
     const replies = {
       save: { ok: true },
       pasteSms: { ok: true, title: "Saved", message: "−₹120.00 Swiggy (preview)" },

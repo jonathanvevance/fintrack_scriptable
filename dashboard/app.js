@@ -10,7 +10,7 @@
 
 (function () {
   const { compileRules, tagsFor, ruleIndexFor, tagAll, describeRule, ruleSentence, orList, patternWords, isPlainPattern, recipientPattern } = FT.tags;
-  const { money, monthLabel, shiftMonth, totals, categoryTotals, merchantTotals, recurringPayments, inrValue } = FT.format;
+  const { money, monthLabel, shiftMonth, totals, categoryTotals, merchantTotals, recurringPayments, inrValue, categoryAllocations } = FT.format;
   const { checkAccounts, compileAccounts, accountLabel } = FT.accounts;
   const app = document.getElementById("app");
 
@@ -195,9 +195,12 @@
   function knownCategories() {
     const count = new Map();
     for (const rule of state.rules) if (rule.set && rule.set.category) count.set(rule.set.category, (count.get(rule.set.category) || 0) + 1);
-    for (const tx of tag(allTx())) if (tx.category) count.set(tx.category, (count.get(tx.category) || 0) + 1);
+    for (const tx of tag(allTx())) {
+      const names = [tx.category, tx.manual && tx.manual.split && tx.manual.split.ownCategory, tx.manual && tx.manual.split && tx.manual.split.lentCategory].filter(Boolean);
+      for (const name of names) count.set(name, (count.get(name) || 0) + 1);
+    }
     for (const name of Object.keys(state.categories)) if (!count.has(name)) count.set(name, 0);
-    for (const name of ["Food", "Groceries", "Shopping", "Travel", "Bills", "Subscriptions"]) if (!count.has(name)) count.set(name, 0);
+    for (const name of ["Food", "Groceries", "Shopping", "Travel", "Bills", "Subscriptions", "Lent"]) if (!count.has(name)) count.set(name, 0);
     return [...count].sort((a, b) => b[1] - a[1]).map(([name]) => name);
   }
 
@@ -208,12 +211,20 @@
     const get = (name) => use.get(name) || use.set(name, { name, rules: 0, tx: 0, hand: 0, paise: 0 }).get(name);
     for (const rule of state.rules) if (rule.set && rule.set.category) get(rule.set.category).rules++;
     for (const tx of tag(allTx())) {
-      if (!tx.category) continue;
-      const u = get(tx.category);
-      u.tx++;
-      if (tx.manual && tx.manual.category === tx.category) u.hand++;
-      const amount = inrValue(tx);
-      if (tx.date.startsWith(state.ym) && amount != null && amount < 0) u.paise -= amount;
+      const allocations = categoryAllocations(tx);
+      if (allocations.length) {
+        for (const allocation of allocations) {
+          if (!allocation.category) continue;
+          const u = get(allocation.category);
+          u.tx++;
+          if (tx.manual && (tx.manual.category === allocation.category || tx.manual.split)) u.hand++;
+          if (tx.date.startsWith(state.ym)) u.paise += allocation.paise;
+        }
+      } else if (tx.category) {
+        const u = get(tx.category);
+        u.tx++;
+        if (tx.manual && tx.manual.category === tx.category) u.hand++;
+      }
     }
     for (const name of Object.keys(state.categories)) get(name);
     return [...use.values()].sort((a, b) => b.tx - a.tx || a.name.localeCompare(b.name));
@@ -231,11 +242,25 @@
     const manual = [];
     for (const [ym, list] of Object.entries(state.months)) {
       for (const tx of list) {
-        if (!tx.manual || tx.manual.category !== from) continue;
+        if (!tx.manual) continue;
         const next = { ...tx.manual };
-        if (to) next.category = to;
-        else delete next.category;
-        manual.push({ ym, id: tx.id, manual: next });
+        let changed = false;
+        if (next.category === from) {
+          if (to) next.category = to;
+          else delete next.category;
+          changed = true;
+        }
+        if (next.split && (next.split.ownCategory === from || next.split.lentCategory === from)) {
+          if (to) {
+            next.split = {
+              ...next.split,
+              ownCategory: next.split.ownCategory === from ? to : next.split.ownCategory,
+              lentCategory: next.split.lentCategory === from ? to : next.split.lentCategory,
+            };
+          } else delete next.split;
+          changed = true;
+        }
+        if (changed) manual.push({ ym, id: tx.id, manual: next });
       }
     }
     const categories = { ...state.categories };
@@ -254,11 +279,13 @@
   const selfIcon = (cls = "") => `<span class="ic self-icon ${cls}" style="background:#8e8e93">${SELF_ICON}</span>`;
 
   function txRow(tx) {
-    const sub = tx.self ? "Self transfer" : tx.category ? esc(tx.category) : `<span class="warn">Needs a category</span>`;
+    const split = tx.manual && tx.manual.split;
+    const sub = tx.self ? "Self transfer" : split ? `${esc(split.ownCategory)} + ${esc(split.lentCategory)}` :
+      tx.category ? esc(tx.category) : `<span class="warn">Needs a category</span>`;
     const where = [tx.bank, tx.account ? "··" + tx.account : null].filter(Boolean).join(" ");
     const day = Number(tx.date.slice(8));
     const converted = tx.currency !== "INR" && Number.isFinite(tx.inrPaise) ? `≈ ${money(Math.abs(tx.inrPaise))} · ` : "";
-    return `<button class="li" data-act="open-tx" data-ym="${esc(tx.date.slice(0, 7))}" data-id="${esc(tx.id)}">${tx.self ? selfIcon() : icon(tx.category)}
+    return `<button class="li" data-act="open-tx" data-ym="${esc(tx.date.slice(0, 7))}" data-id="${esc(tx.id)}">${tx.self ? selfIcon() : icon(split ? split.ownCategory : tx.category)}
       <div class="main"><div class="t1">${esc(shortName(recipient(tx)))}</div><div class="t2">${sub}${where ? " · " + esc(where) : ""}</div></div>
       <div class="amt ${tx.amountPaise > 0 ? "in" : ""}">${tx.amountPaise > 0 ? "+" : ""}${esc(money(Math.abs(tx.amountPaise), tx.currency))}<small>${esc(converted)}${day} ${esc(monthName(tx.date.slice(0, 7)))}</small></div></button>`;
   }
@@ -318,8 +345,9 @@
   function categoryRows(list) {
     const counts = new Map();
     for (const tx of list) {
-      const amount = inrValue(tx);
-      if (amount != null && amount < 0) counts.set(tx.category || null, (counts.get(tx.category || null) || 0) + 1);
+      for (const allocation of categoryAllocations(tx)) {
+        counts.set(allocation.category, (counts.get(allocation.category) || 0) + 1);
+      }
     }
     return categoryTotals(list)
       .map((c) => `<button class="li" data-act="open-list" data-filter="${esc(c.category || "untagged")}">${icon(c.category)}
@@ -338,7 +366,7 @@
       const months = yearMonths(state.year).filter(hasMonth).length;
       note = months ? `Monthly average: ${money(Math.round(spent / months / 100) * 100)}` : "";
     }
-    const untagged = list.filter((tx) => !tx.category).length;
+    const untagged = list.filter((tx) => !tx.category && !(tx.manual && tx.manual.split)).length;
     const cats = categoryTotals(list);
 
     return `<div class="large first">Spending<small>${esc(periodLabel())}</small></div>
@@ -351,7 +379,7 @@
       ${state.year ? `<div class="group pad"><div class="muted small">Each month · tap one to open it</div>${yearBars(state.year)}</div>` : ""}
       ${cats.length ? `<div class="sh">Categories</div><div class="group">${categoryRows(list)}</div>` : ""}
       ${untagged ? `<button class="card attention" data-act="open-list" data-filter="untagged">${icon(null)}<div style="flex:1"><div style="font-weight:600">${plural(untagged, "transaction")} need a category</div>
-        <div class="muted small">Pick a category and turn on Always; FinTrack remembers.</div></div><span class="chev"></span></button>` : ""}
+        <div class="muted small">Choose a category, then add or extend a rule if you want.</div></div><span class="chev"></span></button>` : ""}
       <div class="sh2">Latest ${periodTx().length > Math.min(list.length, 5) ? `<button data-act="open-list" data-filter="all">See All</button>` : ""}</div>
       <div class="group">${list.slice(0, 5).map(txRow).join("") || `<div class="empty">No transactions in ${esc(periodLabel())}</div>`}</div>`;
   }
@@ -371,10 +399,11 @@
     const list = periodTx();
     const special = {
       all: [periodLabel(), () => true],
-      untagged: ["Needs a Category", (t) => !t.category && !t.self],
+      untagged: ["Needs a Category", (t) => !t.category && !t.self && !(t.manual && t.manual.split)],
       received: [`Received · ${periodLabel()}`, (t) => t.amountPaise > 0 && !t.self],
     }[screen.filter];
-    const shown = list.filter(special ? special[1] : (t) => t.category === screen.filter);
+    const shown = list.filter(special ? special[1] : (t) => categoryAllocations(t).some((allocation) => allocation.category === screen.filter) ||
+      (!categoryAllocations(t).length && t.category === screen.filter));
     const title = special ? special[0] : screen.filter;
     const isCategory = !special && state.tab !== "trends";
     return `${backNav(title, isCategory ? `<button data-act="see-trend" data-value="${esc(screen.filter)}">See Trend</button>` : "")}<div style="height:8px"></div>
@@ -393,10 +422,13 @@
         <div style="font-size:22px;font-weight:700">${esc(recipient(tx))}</div>
         <div class="big ${tx.amountPaise > 0 && !tx.self ? "in" : ""}" style="font-size:40px">${esc(money(Math.abs(tx.amountPaise), tx.currency))}</div>
         ${converted}
-        <div class="muted">${esc([when, tx.bank, tx.account ? "··" + tx.account : null].filter(Boolean).join(" · "))}</div></div>`;
+        <div class="muted">${esc([when, tx.bank, tx.account ? "··" + tx.account : null, tx.template === "manual" ? "Entered manually" : null].filter(Boolean).join(" · "))}</div></div>`;
   }
 
   function txMessage(tx, showDelete = true) {
+    if (!tx.raw) {
+      return tx.note ? `<div class="sh">Note</div><div class="group pad muted small">${esc(tx.note)}</div>` : "";
+    }
     return `<div class="sh">Original Message</div>
       <div class="group"><div class="message-body muted small">${esc(tx.raw)}</div>
         <button class="li plain" data-act="copy-sms"><span class="link">Copy SMS</span></button>
@@ -436,6 +468,8 @@
     const ruleIndex = ruleIndexFor(state.compiled, raw);
     const category = tx.category;
     const manual = Boolean(raw.manual && raw.manual.category);
+    const split = raw.manual && raw.manual.split;
+    const allocations = categoryAllocations(tx);
     const rule = ruleIndex == null ? null : state.rules[ruleIndex];
     const categoryRow = `<button class="li" data-act="change-tx-category">${icon(category, "sq")}<div class="main">
       <div class="t1 ${category ? "" : "link"}">${esc(category || "Choose a category")}</div>
@@ -444,18 +478,27 @@
       ? `<button class="li plain" data-act="edit-rule" data-i="${ruleIndex}"><div class="main"><div class="t1">Rule ${ruleIndex + 1} applied</div>
           <div class="t2" style="white-space:normal">${esc(describeRule(rule, rupees))}</div></div><span class="chev"></span></button>`
       : "";
-    const automate = manual && tx.merchant
+    const splitRows = split ? allocations.map((allocation) =>
+      `<button class="li" data-act="open-split">${icon(allocation.category, "sq")}<div class="main"><div class="t1">${esc(allocation.category)}</div>
+        <div class="t2">${allocation.category === split.ownCategory ? "Your share" : "To get back"}</div></div><span class="val">${esc(money(allocation.paise))}</span><span class="chev"></span></button>`).join("") : "";
+    const automate = !split && manual && tx.merchant
       ? `<div class="sh">Use this category again</div><div class="group">
           <button class="li plain" data-act="new-rule-from-tx"><div class="main"><div class="t1">Add a New Rule</div>
             <div class="t2">Use ${esc(category)} for future ${esc(shortName(tx.merchant))} payments</div></div><span class="chev"></span></button>
           <button class="li plain" data-act="add-to-rule"><div class="main"><div class="t1">Add to an Existing Rule</div>
             <div class="t2">Include ${esc(shortName(tx.merchant))} in a rule you already have</div></div><span class="chev"></span></button></div>`
       : "";
+    const splitSection = tx.amountPaise < 0
+      ? `<div class="sh">Split</div><div class="group"><button class="li plain" data-act="open-split"><div class="main">
+          <div class="t1">${split ? split.mode === "even" ? `Even · ${split.people} people` : "Uneven" : "Split Transaction"}</div>
+          <div class="t2">${split ? "Tap to change or remove the split" : "Separate your share from what others owe"}</div>
+          </div><span class="chev"></span></button></div>`
+      : "";
     return `${backNav("", `<span class="tx-actions"><button data-act="tx-menu" aria-label="More transaction actions">•••</button></span>`)}
-      ${txHead(tx, icon(category, "xl"))}
+      ${txHead(tx, icon(split ? split.ownCategory : category, "xl"))}
       <div class="sh">Category</div>
-      <div class="group">${categoryRow}${ruleRow}</div>
-      ${automate}${txMessage(tx, false)}${screen.txMenu ? txMenu() : ""}`;
+      <div class="group">${split ? splitRows : categoryRow + ruleRow}</div>
+      ${automate}${splitSection}${txMessage(tx, false)}${screen.txMenu ? txMenu() : ""}`;
   }
 
   function setManualSelf(isSelfTransfer) {
@@ -547,6 +590,89 @@
     );
   }
 
+  const rupeeInput = (paise) => String(paise / 100);
+  const paiseInput = (value) => {
+    const n = Number(String(value).replace(/,/g, ""));
+    return Number.isFinite(n) ? Math.round(n * 100) : null;
+  };
+
+  function splitValues(screen, tx) {
+    const total = Math.abs(tx.amountPaise);
+    const people = Number(screen.people);
+    const ownPaise = screen.mode === "even"
+      ? Number.isInteger(people) && people >= 2 ? Math.round(total / people) : null
+      : paiseInput(screen.ownAmount);
+    return { total, people, ownPaise, lentPaise: ownPaise == null ? null : total - ownPaise };
+  }
+
+  function splitView(screen) {
+    const tx = tag([findTx(screen.ym, screen.id)])[0];
+    const { total, people, ownPaise, lentPaise } = splitValues(screen, tx);
+    const valid = ownPaise != null && ownPaise > 0 && ownPaise < total && (screen.mode !== "even" || (Number.isInteger(people) && people >= 2));
+    const amount = (value) => value == null || value < 0 ? "—" : money(value, tx.currency);
+    const mode = `<div class="seg wide" style="margin-top:8px">${["even", "uneven"].map((value) =>
+      `<button data-act="split-mode" data-value="${value}" class="${screen.mode === value ? "on" : ""}">${value === "even" ? "Even" : "Uneven"}</button>`).join("")}</div>`;
+    const input = screen.mode === "even"
+      ? `<div class="li plain"><span>People, including you</span><input data-field="people" value="${esc(screen.people)}" inputmode="numeric" pattern="[0-9]*" placeholder="2 or more"></div>`
+      : `<div class="li plain"><span>Your share</span><input data-field="ownAmount" value="${esc(screen.ownAmount)}" inputmode="decimal" placeholder="0"></div>`;
+    return `<div class="nav"><button data-act="back">Cancel</button><span class="mid">Split Transaction</span><button class="end" data-act="save-split"><b>Save</b></button></div>
+      <div class="group" style="margin-top:8px"><div class="li plain"><div class="main"><div class="t1">${esc(recipient(tx))}</div></div><span class="val">${esc(money(total, tx.currency))}</span></div></div>
+      ${mode}
+      <div class="sh">${screen.mode === "even" ? "Even split" : "Uneven split"}</div>
+      <div class="group">${input}
+        <div class="li plain"><div class="main"><div class="t1">Your share</div></div><span class="val">${esc(amount(ownPaise))}</span></div>
+        <div class="li plain"><div class="main"><div class="t1">To get back</div></div><span class="val">${esc(amount(lentPaise))}</span></div></div>
+      <div class="sh">Categories</div><div class="group">
+        <button class="li" data-act="pick-split-category" data-target="ownCategory">${icon(screen.ownCategory, "sq")}<div class="main"><div class="t1">Your share</div></div><span class="val">${esc(screen.ownCategory || "Choose")}</span><span class="chev"></span></button>
+        <button class="li" data-act="pick-split-category" data-target="lentCategory">${icon(screen.lentCategory, "sq")}<div class="main"><div class="t1">To get back</div></div><span class="val">${esc(screen.lentCategory)}</span><span class="chev"></span></button></div>
+      <div class="sf">The bank transaction stays ${esc(money(total, tx.currency))}. FinTrack divides only its category totals.</div>
+      ${screen.editing ? `<div class="group"><button class="li plain" data-act="remove-split"><span class="danger">Remove Split</span></button></div>` : ""}
+      ${valid ? "" : `<div class="sf danger">Enter ${screen.mode === "even" ? "a whole number of 2 or more" : "your positive share below the total"}.</div>`}`;
+  }
+
+  function splitCategoryPickerView(screen) {
+    const parent = state.stack[state.stack.length - 2];
+    const current = parent[screen.target];
+    const rows = knownCategories().map((name) =>
+      `<button class="li" data-act="choose-split-category" data-value="${esc(name)}">${icon(name, "sq")}<div class="main"><div class="t1">${esc(name)}</div></div>
+        ${name === current ? `<span class="check">✓</span>` : ""}</button>`).join("");
+    return `${backNav(screen.target === "ownCategory" ? "Your Share" : "To Get Back")}<div style="height:8px"></div><div class="group">${rows}</div>`;
+  }
+
+  function saveSplit(screen) {
+    const tx = findTx(screen.ym, screen.id);
+    const { people, ownPaise, total } = splitValues(screen, tx);
+    if (screen.mode === "even" && (!Number.isInteger(people) || people < 2)) return showDialog("People needed", "Enter a positive whole number of 2 or more.");
+    if (ownPaise == null || ownPaise <= 0 || ownPaise >= total) return showDialog("Share needed", "Your share must be positive and less than the transaction total.");
+    if (!screen.ownCategory || !screen.lentCategory) return showDialog("Categories needed", "Choose a category for both parts.");
+    const manual = {
+      ...(tx.manual || {}),
+      split: {
+        mode: screen.mode,
+        ...(screen.mode === "even" ? { people } : {}),
+        ownPaise,
+        ownCategory: screen.ownCategory,
+        lentCategory: screen.lentCategory,
+      },
+    };
+    commit({ manual: { ym: screen.ym, id: tx.id, manual } }, "Split saved", "", {
+      pop: true,
+      quiet: true,
+      after: () => showToast("Split saved"),
+    });
+  }
+
+  function removeSplit(screen) {
+    const tx = findTx(screen.ym, screen.id);
+    const manual = { ...(tx.manual || {}) };
+    delete manual.split;
+    commit({ manual: { ym: screen.ym, id: tx.id, manual } }, "Split removed", "", {
+      pop: true,
+      quiet: true,
+      after: () => showToast("Split removed"),
+    });
+  }
+
   // The whole categories map with `newLook` saved for `category`, or null when nothing changes.
   function lookPayload(newLook, category) {
     if (!newLook || newLook.name !== category) return null;
@@ -572,30 +698,119 @@
     return [guessedReviewText(), unrecognisedReviewText()].filter(Boolean).join("\n\n===\n\n");
   }
 
+  function manualAccountOptions() {
+    const options = [];
+    state.accounts.forEach((bank, bankIndex) => {
+      if (bank.account) options.push({
+        key: `${bankIndex}:account`,
+        bank: bank.bank,
+        account: bank.account.last4,
+        accountType: "bank",
+        label: accountLabel(bank.bank, bank.account).trim(),
+      });
+      (bank.cards || []).forEach((card, cardIndex) => options.push({
+        key: `${bankIndex}:card:${cardIndex}`,
+        bank: bank.bank,
+        account: card.last4,
+        accountType: "credit_card",
+        label: `${bank.bank} ${card.name || "Card"} ··${card.last4}`,
+      }));
+    });
+    return options;
+  }
+
+  function manualView(screen) {
+    const direction = `<div class="seg wide" style="margin-top:8px">${[["out", "Paid"], ["in", "Received"]].map(([value, label]) =>
+      `<button data-act="manual-direction" data-value="${value}" class="${screen.direction === value ? "on" : ""}">${label}</button>`).join("")}</div>`;
+    return `<div class="nav"><button data-act="back">Cancel</button><span class="mid">New Transaction</span><button class="end" data-act="save-manual"><b>Add</b></button></div>
+      ${direction}
+      <div class="sh">Transaction</div><div class="group">
+        <div class="li plain"><span>Amount</span><input data-field="amount" value="${esc(screen.amount)}" placeholder="0" inputmode="decimal"></div>
+        <div class="li plain"><span>${screen.direction === "out" ? "Paid to" : "Received from"}</span><input data-field="merchant" value="${esc(screen.merchant)}" placeholder="Name" autocapitalize="words"></div>
+        <div class="li plain"><span>Date</span><input data-field="date" type="date" value="${esc(screen.date)}"></div>
+        <button class="li plain" data-act="manual-category"><div class="main"><div class="t1">Category</div></div><span class="val ${screen.category ? "" : "link"}">${esc(screen.category || "Choose")}</span><span class="chev"></span></button></div>
+      <div class="sh">Optional</div><div class="group">
+        <button class="li plain" data-act="manual-account"><div class="main"><div class="t1">Account</div></div><span class="val">${esc(screen.account ? screen.account.label : "None")}</span><span class="chev"></span></button>
+        <div class="li plain"><span>Note</span><input data-field="note" value="${esc(screen.note)}" placeholder="Optional"></div></div>
+      <div class="sf">No SMS is required, and no fake SMS is stored.</div>`;
+  }
+
+  function manualCategoryPickerView() {
+    const parent = state.stack[state.stack.length - 2];
+    const rows = knownCategories().map((name) =>
+      `<button class="li" data-act="choose-manual-category" data-value="${esc(name)}">${icon(name, "sq")}<div class="main"><div class="t1">${esc(name)}</div></div>
+        ${name === parent.category ? `<span class="check">✓</span>` : ""}</button>`).join("");
+    return `${backNav("Category")}<div style="height:8px"></div><div class="group">${rows}</div>`;
+  }
+
+  function manualAccountPickerView() {
+    const parent = state.stack[state.stack.length - 2];
+    const options = manualAccountOptions();
+    const rows = options.map((option) =>
+      `<button class="li plain" data-act="choose-manual-account" data-value="${esc(option.key)}"><div class="main"><div class="t1">${esc(option.label)}</div></div>
+        ${parent.account && parent.account.key === option.key ? `<span class="check">✓</span>` : ""}</button>`).join("");
+    return `${backNav("Account")}<div style="height:8px"></div><div class="group">
+      <button class="li plain" data-act="choose-manual-account" data-value=""><div class="main"><div class="t1">None</div></div>${parent.account ? "" : `<span class="check">✓</span>`}</button>
+      ${rows}</div>`;
+  }
+
+  function saveManual(screen) {
+    const amountPaise = paiseInput(screen.amount);
+    if (amountPaise == null || amountPaise <= 0) return showDialog("Amount needed", "Enter a positive amount.");
+    if (!screen.merchant.trim()) return showDialog("Name needed", `Enter who you ${screen.direction === "out" ? "paid" : "received money from"}.`);
+    if (!screen.category) return showDialog("Category needed", "Choose a category.");
+    const account = screen.account || {};
+    request("addManual", {
+      direction: screen.direction,
+      amountPaise,
+      merchant: screen.merchant.trim(),
+      date: screen.date,
+      bank: account.bank || null,
+      account: account.account || null,
+      accountType: account.accountType || "bank",
+      category: screen.category,
+      note: screen.note,
+    }, {
+      quiet: true,
+      after: (result) => {
+        state.tab = "spending";
+        state.stack = [{ type: "tx", ym: result.ym, id: result.id }];
+        render();
+        showToast("Transaction added");
+      },
+    });
+  }
+
   function moreView() {
     const review = state.unparsed.length + toCheck().length;
     const owned = state.accounts.filter((b) => b.account).length;
     const cards = state.accounts.reduce((n, b) => n + (b.cards || []).length, 0);
     const summary = owned || cards ? `${plural(owned, "bank account")} · ${plural(cards, "card")}` : "Not set up";
     return `<div class="large first">More</div>
-      <div class="sh">You</div>
-      <div class="group"><button class="li plain" data-act="open-accounts"><div class="main"><div class="t1">My Accounts</div><div class="t2">${esc(summary)}</div></div><span class="chev"></span></button></div>
-      <div class="sf">Payments between these are self transfers and aren't counted as spending.</div>
-      <div class="sh">Add</div>
-      <div class="group"><button class="li plain" data-act="paste-sms"><span class="link">Add SMS from Clipboard</span></button></div>
-      <div class="sf">Copy a bank SMS in Messages first. It is saved the same way the automation would.</div>
-      <div class="sh">Review</div>
-      <div class="group">
-        <button class="li plain" data-act="open-guessed"><span class="review-badge guessed">?</span><div class="main"><div class="t1">Check Guessed Transactions</div><div class="t2">Already included in your totals</div></div><span class="val">${toCheck().length}</span><span class="chev"></span></button>
-        <button class="li plain" data-act="open-unparsed"><span class="review-badge missed">!</span><div class="main"><div class="t1">Messages FinTrack Missed</div><div class="t2">Not included in your totals</div></div><span class="val">${state.unparsed.length}</span><span class="chev"></span></button>
-        ${review ? `<button class="li plain" data-act="copy-review"><span class="link">Copy Everything for Code Editor</span></button>` : ""}
-      </div>
-      <div class="sf">Paste exact messages into your code editor's AI chat to add or improve parser templates.</div>
-      <div class="sh">App</div>
-      <div class="group">
-        <button class="li plain" data-act="update"><span class="link">Update FinTrack</span></button>
-        <div class="li plain"><div class="main"><div class="t1">Version</div></div><span class="val small" style="white-space:normal;text-align:right;max-width:65%">${esc(state.version || "unknown")}</span></div>
-      </div>`;
+      <div class="sh">Add</div><div class="group">
+        <button class="li plain" data-act="new-manual"><div class="main"><div class="t1">Add Transaction</div><div class="t2">Enter one without an SMS</div></div><span class="chev"></span></button>
+        <button class="li plain" data-act="paste-sms"><div class="main"><div class="t1">Import from Clipboard</div><div class="t2">Read a copied bank SMS</div></div><span class="chev"></span></button></div>
+      <div class="sh">You</div><div class="group">
+        <button class="li plain" data-act="open-accounts"><div class="main"><div class="t1">My Accounts</div><div class="t2">${esc(summary)}</div></div><span class="chev"></span></button></div>
+      <div class="sh">Review</div><div class="group">
+        <button class="li plain" data-act="open-review-hub"><div class="main"><div class="t1">Message Review</div><div class="t2">Guesses and messages FinTrack missed</div></div><span class="val">${review}</span><span class="chev"></span></button></div>
+      <div class="sh">App</div><div class="group">
+        <button class="li plain" data-act="open-app-menu"><div class="main"><div class="t1">App &amp; Updates</div><div class="t2">Update, version and help</div></div><span class="chev"></span></button></div>`;
+  }
+
+  function reviewHubView() {
+    const review = state.unparsed.length + toCheck().length;
+    return `${backNav("")}<div class="large">Message Review</div><div class="group">
+      <button class="li plain" data-act="open-guessed"><span class="review-badge guessed">?</span><div class="main"><div class="t1">Check Guessed Transactions</div><div class="t2">Already included in your totals</div></div><span class="val">${toCheck().length}</span><span class="chev"></span></button>
+      <button class="li plain" data-act="open-unparsed"><span class="review-badge missed">!</span><div class="main"><div class="t1">Messages FinTrack Missed</div><div class="t2">Not included in your totals</div></div><span class="val">${state.unparsed.length}</span><span class="chev"></span></button>
+      ${review ? `<button class="li plain" data-act="copy-review"><span class="link">Copy Everything for Code Editor</span></button>` : ""}</div>
+      <div class="sf">Paste exact messages into your code editor's AI chat to improve parser templates.</div>`;
+  }
+
+  function appMenuView() {
+    return `${backNav("")}<div class="large">App &amp; Updates</div><div class="group">
+      <button class="li plain" data-act="update"><span class="link">Update FinTrack</span></button>
+      <div class="li plain"><div class="main"><div class="t1">Version</div></div><span class="val small" style="white-space:normal;text-align:right;max-width:65%">${esc(state.version || "unknown")}</span></div></div>`;
   }
 
   function guessedView() {
@@ -1351,6 +1566,8 @@
     const screen = top();
     state.previewLook = (screen && screen.newLook) || null;
     const views = { tx: txView, "tx-category": txCategoryView, "tx-rule-picker": txRulePickerView, list: listView, rule: ruleView, guessed: guessedView, unparsed: unparsedView, categories: categoriesView, category: categoryView, merge: mergeView,
+      split: splitView, "split-category": splitCategoryPickerView, manual: manualView, "manual-category": manualCategoryPickerView, "manual-account": manualAccountPickerView,
+      "review-hub": reviewHubView, "app-menu": appMenuView,
       accounts: accountsView, "add-bank": addBankView, bank: bankView, account: accountView, card: cardView };
     let body = screen ? views[screen.type](screen) : { spending: spendingView, trends: trendsView, rules: rulesView, more: moreView }[state.tab]();
     if (!screen && state.tab !== "rules" && state.tabHistory.length) body = `<div class="nav">${tabBack()}<span class="mid"></span><span class="end"></span></div>${body}`;
@@ -1424,6 +1641,36 @@
       const tx = tag([findTx(el.dataset.ym, el.dataset.id)])[0];
       push({ type: "tx", ym: el.dataset.ym, id: tx.id });
     },
+    "open-split": (el) => {
+      const current = top();
+      const ym = el.dataset.ym || current.ym;
+      const id = el.dataset.id || current.id;
+      const tx = findTx(ym, id);
+      const tagged = tag([tx])[0];
+      const split = tx.manual && tx.manual.split;
+      const total = Math.abs(tx.amountPaise);
+      push({
+        type: "split",
+        ym,
+        id,
+        mode: split ? split.mode : "even",
+        people: split && split.people ? String(split.people) : "5",
+        ownAmount: split ? String(split.ownPaise / 100) : String(Math.round(total / 5) / 100),
+        ownCategory: split ? split.ownCategory : (tagged.category || ""),
+        lentCategory: split ? split.lentCategory : "Lent",
+        editing: !!split,
+      });
+    },
+    "split-mode": (el) => { top().mode = el.dataset.value; render(); },
+    "pick-split-category": (el) => push({ type: "split-category", target: el.dataset.target }),
+    "choose-split-category": (el) => {
+      const target = top().target;
+      state.stack[state.stack.length - 2][target] = el.dataset.value;
+      state.stack.pop();
+      render();
+    },
+    "save-split": () => saveSplit(top()),
+    "remove-split": () => removeSplit(top()),
     "change-tx-category": () => {
       const s = top();
       push({ type: "tx-category", ym: s.ym, id: s.id });
@@ -1601,6 +1848,27 @@
     "clear-unparsed": () => showDialog("Clear Unrecognised?", `${plural(state.unparsed.length, "message")} will be removed.`, [["Cancel", "close"], ["Clear", "clear-confirm", true]]),
     "clear-confirm": () => { state.dialog = null; render(); request("clearUnparsed", {}, { pop: true }); },
     update: () => request("update"),
+    "new-manual": () => {
+      const now = new Date();
+      const date = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+      push({ type: "manual", direction: "out", amount: "", merchant: "", date, category: "", account: null, note: "" });
+    },
+    "manual-direction": (el) => { top().direction = el.dataset.value; render(); },
+    "manual-category": () => push({ type: "manual-category" }),
+    "choose-manual-category": (el) => {
+      state.stack[state.stack.length - 2].category = el.dataset.value;
+      state.stack.pop();
+      render();
+    },
+    "manual-account": () => push({ type: "manual-account" }),
+    "choose-manual-account": (el) => {
+      state.stack[state.stack.length - 2].account = manualAccountOptions().find((option) => option.key === el.dataset.value) || null;
+      state.stack.pop();
+      render();
+    },
+    "save-manual": () => saveManual(top()),
+    "open-review-hub": () => push({ type: "review-hub" }),
+    "open-app-menu": () => push({ type: "app-menu" }),
     "open-accounts": () => push({ type: "accounts" }),
     "add-bank": () => push({ type: "add-bank", otherInput: "" }),
     "pick-bank": (el) => {
@@ -1747,6 +2015,17 @@
     if (screen.type === "rule") {
       screen.fields[name] = e.target.value;
       document.getElementById("preview").innerHTML = previewHtml(screen);
+    }
+    if (screen.type === "manual") screen[name] = e.target.value;
+    if (screen.type === "split") {
+      screen[name] = e.target.value;
+      const position = e.target.selectionStart;
+      render();
+      const input = app.querySelector(`[data-field="${name}"]`);
+      if (input) {
+        input.focus();
+        if (position != null && input.setSelectionRange) input.setSelectionRange(position, position);
+      }
     }
   });
 

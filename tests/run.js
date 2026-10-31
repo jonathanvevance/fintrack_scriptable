@@ -9,7 +9,7 @@ function load(path) {
 }
 
 const { parseSms, parseDate } = load("lib/parse.js");
-const { money, shiftMonth, totals, categoryTotals, merchantTotals, recurringPayments } = load("lib/format.js");
+const { money, shiftMonth, totals, categoryTotals, merchantTotals, recurringPayments, categoryAllocations } = load("lib/format.js");
 const { compileRules, tagsFor, ruleIndexFor, tagAll, describeRule, patternWords, isPlainPattern, recipientPattern } = load("lib/tags.js");
 const { checkAccounts, compileAccounts, accountLabel } = load("lib/accounts.js");
 const { annotateMonths, annotateTransaction, cleanCache, neededDates, pickRate, rateFor } = load("lib/exchange.js");
@@ -304,6 +304,24 @@ eq(
   "converted foreign spend joins category total",
   categoryTotals([{ category: "Subscriptions", currency: "USD", amountPaise: -2000, inrPaise: -189860 }]),
   [{ category: "Subscriptions", paise: 189860 }]
+);
+eq(
+  "split spend divides category totals without changing total",
+  categoryAllocations({
+    category: "Shopping",
+    currency: "INR",
+    amountPaise: -10000000,
+    manual: { split: { mode: "even", people: 5, ownPaise: 2000000, ownCategory: "Shopping", lentCategory: "Lent" } },
+  }),
+  [{ category: "Shopping", paise: 2000000 }, { category: "Lent", paise: 8000000 }]
+);
+eq(
+  "split category totals combine with normal spending",
+  categoryTotals([
+    { category: "Shopping", currency: "INR", amountPaise: -10000000, manual: { split: { mode: "uneven", ownPaise: 2750000, ownCategory: "Shopping", lentCategory: "Lent" } } },
+    { category: "Shopping", currency: "INR", amountPaise: -50000 },
+  ]),
+  [{ category: "Lent", paise: 7250000 }, { category: "Shopping", paise: 2800000 }]
 );
 eq(
   "converted foreign spend joins merchant total",
