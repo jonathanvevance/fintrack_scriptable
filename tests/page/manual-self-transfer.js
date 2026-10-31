@@ -24,6 +24,7 @@
     ok("self-transfer action starts hidden", !app.querySelector('[data-act="mark-self"]'));
 
     click('[data-act="tx-menu"]');
+    ok("transaction menu locks the screen behind it", document.body.classList.contains("scroll-locked") && getComputedStyle(document.body).position === "fixed");
     const markButton = app.querySelector('[data-act="mark-self"]');
     const deleteButton = app.querySelector('.tx-menu [data-act="delete-tx"]');
     const red = document.createElement("span");
@@ -35,6 +36,7 @@
     red.remove();
     click('[data-act="mark-self"]');
     ok("mark asks for confirmation", /Mark as Self Transfer\? It will not count as spending or money received/.test(text()), text().slice(-180));
+    ok("confirmation window keeps the screen locked", document.body.classList.contains("scroll-locked") && getComputedStyle(document.body).position === "fixed");
     click('[data-act="mark-self-confirm"]');
     await wait(300);
     const marked = sent[sent.length - 1];
@@ -42,6 +44,7 @@
     ok("save explains the effect", /This transaction will not count as spending or money received/.test(text()), text().slice(-180));
 
     click('[data-act="close"]');
+    ok("closing confirmation unlocks the screen", !document.body.classList.contains("scroll-locked"));
     ok("manual self transfer has new SVG icon", app.querySelector(".self-icon svg") && !/↔/.test(text()), text().slice(0, 180));
     ok("manual reason is shown", /you marked this transaction by hand/.test(text()), text().slice(0, 260));
     ok("manual self transfer has no category picker", !app.querySelector('[data-act="pick-cat"]'));

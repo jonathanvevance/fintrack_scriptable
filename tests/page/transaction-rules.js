@@ -24,6 +24,8 @@
     ok("only the winning rule is shown", !/other matching rule/i.test(text()));
     ok("transaction page has no Save button", !app.querySelector('[data-act="save-tx"]'));
     ok("original message is visible", /Rs 1845 debited from A\/c XX1234 towards BIGBASKET/.test(text()), text());
+    ok("message and copy action share one group",
+      app.querySelector(".message-body").closest(".group") === app.querySelector('[data-act="copy-sms"]').closest(".group"));
     click('[data-act="copy-sms"]');
     await wait(250);
     ok("message copy confirms with a toast without a window", /Copied to clipboard/.test(document.body.innerText) && !app.querySelector(".alert"), text().slice(-200));

@@ -398,8 +398,7 @@
 
   function txMessage(tx, showDelete = true) {
     return `<div class="sh">Original Message</div>
-      <div class="group pad muted small" style="line-height:1.4;user-select:text;-webkit-user-select:text">${esc(tx.raw)}</div>
-      <div class="group">
+      <div class="group"><div class="message-body muted small">${esc(tx.raw)}</div>
         <button class="li plain" data-act="copy-sms"><span class="link">Copy SMS</span></button>
         ${showDelete ? `<button class="li plain" data-act="delete-tx"><span class="danger">Delete Transaction</span></button>` : ""}</div>`;
   }
@@ -1327,11 +1326,29 @@
     more: '<svg viewBox="0 0 26 24"><circle cx="5" cy="12" r="2.6"/><circle cx="13" cy="12" r="2.6"/><circle cx="21" cy="12" r="2.6"/></svg>',
   };
 
+  let lockedScrollY = null;
+  function syncScrollLock() {
+    const screen = top();
+    const shouldLock = Boolean(state.dialog || (screen && (screen.sheet || screen.txMenu)));
+    if (shouldLock && lockedScrollY == null) {
+      lockedScrollY = window.scrollY;
+      document.body.style.top = `-${lockedScrollY}px`;
+      document.body.classList.add("scroll-locked");
+    } else if (!shouldLock && lockedScrollY != null) {
+      const restore = lockedScrollY;
+      lockedScrollY = null;
+      document.body.classList.remove("scroll-locked");
+      document.body.style.top = "";
+      window.scrollTo(0, restore);
+    }
+  }
+
   function render() {
     if (!state.ym) {
       app.innerHTML = `<div class="large" style="padding-top:40px">FinTrack<small>Loading…</small></div>`;
       return;
     }
+    syncScrollLock();
     const screen = top();
     state.previewLook = (screen && screen.newLook) || null;
     const views = { tx: txView, "tx-category": txCategoryView, "tx-rule-picker": txRulePickerView, list: listView, rule: ruleView, guessed: guessedView, unparsed: unparsedView, categories: categoriesView, category: categoryView, merge: mergeView,
@@ -1547,6 +1564,7 @@
     close: () => { state.dialog = null; render(); },
     "copy-sms": () => copyWithToast(findTx(top().ym, top().id).raw),
     "delete-tx": () => {
+      if (top() && top().type === "tx") top().txMenu = false;
       const tx = findTx(top().ym, top().id);
       showDialog("Delete Transaction?", `${shortName(recipient(tx))}, ${money(Math.abs(tx.amountPaise), tx.currency)}. This cannot be undone.`,
         [["Cancel", "close"], ["Delete", "delete-tx-confirm", true]]);

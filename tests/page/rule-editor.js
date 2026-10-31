@@ -41,8 +41,12 @@
 
     click('.rule-sentence [data-value="dir"]');
     ok("dir sheet", /When I … pay money goes out receive money money comes in pay or get money either way/i.test(sheetText()), sheetText());
+    ok("rule sheet locks the screen behind it",
+      document.body.classList.contains("scroll-locked") && getComputedStyle(document.body).position === "fixed" &&
+      getComputedStyle(app.querySelector(".sheet")).overflowY === "auto");
     click('.sheet [data-act="dir"][data-value="out"]');
     ok("dir picked closes sheet", !app.querySelector(".sheet") && sentenceText().startsWith("When I pay and the SMS says cashback"), sentenceText());
+    ok("closing rule sheet unlocks the screen", !document.body.classList.contains("scroll-locked"));
 
     click('[data-act="open-sheet"][data-value="names"]');
     ok("names sheet", /Names Add A name matches Part of the name .*Exactly/i.test(sheetText()) && !/Remove from Sentence/i.test(sheetText()), sheetText());
