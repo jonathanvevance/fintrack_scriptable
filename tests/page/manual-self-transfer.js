@@ -56,6 +56,14 @@
     ok("change to payment removes manual mark", unmarked.action === "save" && Object.keys(unmarked.manual.manual).length === 0, JSON.stringify(unmarked));
     click('[data-act="close"]');
     ok("payment category control returns", app.querySelector('[data-act="change-tx-category"]') && !app.querySelector(".self-icon"));
+
+    click('[data-act="tx-menu"]');
+    click('.tx-menu [data-act="delete-tx"]');
+    ok("delete still asks for confirmation", /Delete Transaction\?/.test(text()) && app.querySelector('[data-act="delete-tx-confirm"]'));
+    click('[data-act="delete-tx-confirm"]');
+    await wait(300);
+    ok("delete request is sent", sent[sent.length - 1].action === "deleteTx", JSON.stringify(sent[sent.length - 1]));
+    ok("deleted confirms with a toast without an OK window", /Deleted/.test(document.body.innerText) && !app.querySelector(".alert"), document.body.innerText.slice(-180));
   } catch (e) {
     out.push(`FAIL exception ${e.message} ${(e.stack || "").split("\n")[1]}`);
   }

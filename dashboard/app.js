@@ -1229,22 +1229,21 @@
     fintrack.send({ action, ...fields });
   }
 
+  function showToast(message) {
+    const old = document.querySelector(".toast");
+    if (old) old.remove();
+    const toast = document.createElement("div");
+    toast.className = "toast";
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(() => {
+      toast.classList.add("out");
+      setTimeout(() => toast.remove(), 200);
+    }, 1500);
+  }
+
   function copyWithToast(text) {
-    request("copy", { text }, {
-      quiet: true,
-      after: () => {
-        const old = document.querySelector(".copy-toast");
-        if (old) old.remove();
-        const toast = document.createElement("div");
-        toast.className = "copy-toast";
-        toast.textContent = "Copied to clipboard";
-        document.body.appendChild(toast);
-        setTimeout(() => {
-          toast.classList.add("out");
-          setTimeout(() => toast.remove(), 200);
-        }, 1500);
-      },
-    });
+    request("copy", { text }, { quiet: true, after: () => showToast("Copied to clipboard") });
   }
 
   function useData(data) {
@@ -1569,7 +1568,18 @@
       showDialog("Delete Transaction?", `${shortName(recipient(tx))}, ${money(Math.abs(tx.amountPaise), tx.currency)}. This cannot be undone.`,
         [["Cancel", "close"], ["Delete", "delete-tx-confirm", true]]);
     },
-    "delete-tx-confirm": () => { state.dialog = null; render(); request("deleteTx", { ym: top().ym, id: top().id }, { pop: true }); },
+    "delete-tx-confirm": () => {
+      state.dialog = null;
+      render();
+      request("deleteTx", { ym: top().ym, id: top().id }, {
+        pop: true,
+        quiet: true,
+        after: () => {
+          render();
+          showToast("Deleted");
+        },
+      });
+    },
     "paste-sms": () => request("pasteSms"),
     "open-guessed": () => push({ type: "guessed" }),
     "open-unparsed": () => push({ type: "unparsed" }),
