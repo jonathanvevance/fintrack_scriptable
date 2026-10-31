@@ -1230,14 +1230,19 @@
     fintrack.send({ action, ...fields });
   }
 
-  function copyInline(button, text) {
-    const original = button.innerHTML;
+  function copyWithToast(text) {
     request("copy", { text }, {
       quiet: true,
       after: () => {
-        button.innerHTML = `<span class="link">✓ Copied</span>`;
+        const old = document.querySelector(".copy-toast");
+        if (old) old.remove();
+        const toast = document.createElement("div");
+        toast.className = "copy-toast";
+        toast.textContent = "Copied to clipboard";
+        document.body.appendChild(toast);
         setTimeout(() => {
-          if (button.isConnected) button.innerHTML = original;
+          toast.classList.add("out");
+          setTimeout(() => toast.remove(), 200);
         }, 1500);
       },
     });
@@ -1540,7 +1545,7 @@
       commit(undo, "Undone", "Back to how it was.", { isUndo: true, detailOnly: true });
     },
     close: () => { state.dialog = null; render(); },
-    "copy-sms": (el) => copyInline(el, findTx(top().ym, top().id).raw),
+    "copy-sms": () => copyWithToast(findTx(top().ym, top().id).raw),
     "delete-tx": () => {
       const tx = findTx(top().ym, top().id);
       showDialog("Delete Transaction?", `${shortName(recipient(tx))}, ${money(Math.abs(tx.amountPaise), tx.currency)}. This cannot be undone.`,
@@ -1550,8 +1555,8 @@
     "paste-sms": () => request("pasteSms"),
     "open-guessed": () => push({ type: "guessed" }),
     "open-unparsed": () => push({ type: "unparsed" }),
-    "copy-guessed": (el) => copyInline(el, findTx(el.dataset.ym, el.dataset.id).raw),
-    "copy-guessed-all": (el) => copyInline(el, guessedReviewText()),
+    "copy-guessed": (el) => copyWithToast(findTx(el.dataset.ym, el.dataset.id).raw),
+    "copy-guessed-all": () => copyWithToast(guessedReviewText()),
     "mark-guessed": (el) => {
       const tx = findTx(el.dataset.ym, el.dataset.id);
       const manual = { ...(tx.manual || {}), lowConfidenceReviewed: true };
@@ -1562,9 +1567,9 @@
         { detailOnly: true },
       );
     },
-    "copy-unparsed": (el) => copyInline(el, state.unparsed.find((u) => u.id === el.dataset.id).text),
-    "copy-unparsed-all": (el) => copyInline(el, unrecognisedReviewText()),
-    "copy-review": (el) => copyInline(el, reviewText()),
+    "copy-unparsed": (el) => copyWithToast(state.unparsed.find((u) => u.id === el.dataset.id).text),
+    "copy-unparsed-all": () => copyWithToast(unrecognisedReviewText()),
+    "copy-review": () => copyWithToast(reviewText()),
     "clear-unparsed": () => showDialog("Clear Unrecognised?", `${plural(state.unparsed.length, "message")} will be removed.`, [["Cancel", "close"], ["Clear", "clear-confirm", true]]),
     "clear-confirm": () => { state.dialog = null; render(); request("clearUnparsed", {}, { pop: true }); },
     update: () => request("update"),

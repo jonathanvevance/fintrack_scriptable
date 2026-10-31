@@ -142,6 +142,12 @@ input::placeholder { color: var(--sec); }
 .alert .acts button + button { border-left: .5px solid var(--sep); font-weight: 600; }
 .alert .acts button.danger { color: var(--red); }
 
+/* Brief confirmation for copy actions; unlike an alert, it needs no dismissal. */
+.copy-toast { position: fixed; z-index: 30; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+  padding: 9px 14px; border-radius: 18px; background: var(--text); color: var(--bg); font-size: 13px; font-weight: 600; white-space: nowrap;
+  opacity: 1; transition: opacity .2s; }
+.copy-toast.out { opacity: 0; }
+
 /* Month strip and year bars */
 .strip { position: relative; display: flex; align-items: center; gap: 8px; overflow-x: auto; padding: 4px 16px 18px; scrollbar-width: none; }
 .strip::-webkit-scrollbar { display: none; }
