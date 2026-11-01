@@ -481,10 +481,11 @@
     const splitRows = split ? allocations.map((allocation) =>
       `<button class="li" data-act="open-split">${icon(allocation.category, "sq")}<div class="main"><div class="t1">${esc(allocation.category)}</div>
         <div class="t2">${allocation.category === split.ownCategory ? "Your share" : "To get back"}</div></div><span class="val">${esc(money(allocation.paise))}</span><span class="chev"></span></button>`).join("") : "";
-    const automate = !split && manual && tx.merchant
+    const ruleCategory = split ? split.ownCategory : manual ? category : null;
+    const automate = ruleCategory && tx.merchant && (!rule || rule.set.category !== ruleCategory)
       ? `<div class="sh">Use this category again</div><div class="group">
           <button class="li plain" data-act="new-rule-from-tx"><div class="main"><div class="t1">Add a New Rule</div>
-            <div class="t2">Use ${esc(category)} for future ${esc(shortName(tx.merchant))} payments</div></div><span class="chev"></span></button>
+            <div class="t2">Use ${esc(ruleCategory)} for future ${esc(shortName(tx.merchant))} payments</div></div><span class="chev"></span></button>
           <button class="li plain" data-act="add-to-rule"><div class="main"><div class="t1">Add to an Existing Rule</div>
             <div class="t2">Include ${esc(shortName(tx.merchant))} in a rule you already have</div></div><span class="chev"></span></button></div>`
       : "";
@@ -498,7 +499,7 @@
     return `${backNav("", `<span class="tx-actions"><button data-act="tx-menu" aria-label="More transaction actions">•••</button></span>`)}
       ${txHead(tx, icon(split ? split.ownCategory : category, "xl"))}
       <div class="sh">Category</div>
-      <div class="group">${split ? splitRows : categoryRow + ruleRow}</div>
+      <div class="group">${split ? splitRows + ruleRow : categoryRow + ruleRow}</div>
       ${automate}${splitSection}${txMessage(tx, false)}${screen.txMenu ? txMenu() : ""}`;
   }
 
@@ -550,6 +551,10 @@
     return { ...rule, when: { ...rule.when, merchant: recipientPattern([...words, merchant], exact) } };
   }
 
+  const ruleCategoryFor = (tx) => tx.manual && tx.manual.split
+    ? tx.manual.split.ownCategory
+    : tx.manual && tx.manual.category;
+
   function rulesThatCanInclude(tx, category) {
     const raw = { ...tx, manual: undefined };
     const found = [];
@@ -565,7 +570,7 @@
 
   function txRulePickerView(screen) {
     const tx = findTx(screen.ym, screen.id);
-    const category = tx.manual && tx.manual.category;
+    const category = ruleCategoryFor(tx);
     const rows = rulesThatCanInclude(tx, category)
       .map(({ index }) => `<button class="li plain" data-act="include-in-rule" data-i="${index}"><div class="main">
         <div class="t1">Rule ${index + 1}</div><div class="t2" style="white-space:normal">${esc(describeRule(state.rules[index], rupees))}</div>
@@ -577,7 +582,7 @@
 
   function includeTxInRule(screen, index) {
     const tx = findTx(screen.ym, screen.id);
-    const category = tx.manual && tx.manual.category;
+    const category = ruleCategoryFor(tx);
     const candidate = rulesThatCanInclude(tx, category).find((item) => item.index === index);
     if (!candidate) return showDialog("Rule no longer available", "Go back and try again.");
     const rules = state.rules.map((rule, i) => (i === index ? candidate.updated : rule));
@@ -1699,8 +1704,8 @@
     "choose-tx-category": (el) => chooseTxCategory(top(), el.dataset.value),
     "new-rule-from-tx": () => {
       const s = top();
-      const tx = tag([findTx(s.ym, s.id)])[0];
-      const rule = { when: { merchant: recipientPattern([tx.merchant], true) }, set: { category: tx.category } };
+      const tx = findTx(s.ym, s.id);
+      const rule = { when: { merchant: recipientPattern([tx.merchant], true) }, set: { category: ruleCategoryFor(tx) } };
       push({ type: "rule", index: null, txRef: { ym: s.ym, id: s.id }, ...fieldsFromRule(rule) });
     },
     "add-to-rule": () => {

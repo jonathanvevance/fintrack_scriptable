@@ -69,6 +69,22 @@
       saved.manual.manual.split.lentCategory === "Lent", JSON.stringify(saved));
     await wait(250);
     ok("detail shows both parts", /Shopping Your share ₹20,000/.test(text()) && /Lent To get back ₹80,000/.test(text()), text());
+    ok("split offers both rule paths for the your-share category",
+      /Add a New Rule/.test(text()) && /Add to an Existing Rule/.test(text()) &&
+      /Use Shopping for future Furniture St payments/.test(text()), text());
+    click('[data-act="add-to-rule"]');
+    ok("split can extend a matching own-category rule", /Choose a Shopping rule/.test(text()) && /Amazon/.test(text()), text());
+    click('[data-act="include-in-rule"]');
+    await wait(250);
+    const extended = sent[sent.length - 1];
+    ok("extending a rule preserves the split", extended.action === "save" &&
+      /Furniture Store/.test(extended.rules[3].when.merchant) &&
+      !("category" in extended.manual.manual) &&
+      extended.manual.manual.split.ownCategory === "Shopping" &&
+      extended.manual.manual.split.lentCategory === "Lent", JSON.stringify(extended));
+    click('[data-act="close"]');
+    ok("rule applies while split allocations remain", /Rule 4 applied/.test(text()) &&
+      /Shopping Your share ₹20,000/.test(text()) && /Lent To get back ₹80,000/.test(text()), text());
 
     click('[data-act="open-split"]');
     ok("split labels use approved wording", /Evenly/.test(text()) && /By shares/.test(text()) && /By amount/.test(text()) &&
