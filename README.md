@@ -180,6 +180,7 @@ Templates in `lib/parse.js` (`TEMPLATES`, tried in order; the id is saved as `te
 | `sbi-cc-payment` | SBI Card payment received (self transfer) |
 | `icici-upi-debit` | ICICI account debited, payee credited (UPI) |
 | `icici-account-debit` | ICICI account debited towards … |
+| `hdfc-cc-spend` | HDFC card spent at … |
 | `hdfc-cc-payment` | HDFC card payment received (self transfer) |
 | `generic` | Anything else with an amount and debited / credited / spent / paid / received; `confidence: "low"` |
 

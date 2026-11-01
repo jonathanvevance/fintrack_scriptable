@@ -133,6 +133,11 @@ const cases = [
     expect: { template: "sbi-cc-spend", bank: "SBI", accountType: "credit_card", account: "5678", merchant: "UBER INDIA SYSTEMS", currency: "INR", amountPaise: -8900, date: "2026-10-22" },
   },
   {
+    name: "HDFC card spend extracts merchant from timestamp wording",
+    sms: "Spent Rs.1,234.50 On HDFC Bank Card 1111 At RSP*SWIGGY PVT LTD FOO On 2026-11-01:14:16:16.Not You? To Block+Reissue Call 18000000000/SMS BLOCK CC 1111 to 7000000000",
+    expect: { template: "hdfc-cc-spend", bank: "HDFC", accountType: "credit_card", account: "1111", merchant: "RSP*SWIGGY PVT LTD FOO", currency: "INR", amountPaise: -123450, date: "2026-11-01" },
+  },
+  {
     name: "SBI card spend in adjacent USD",
     sms: "USD21.98 spent on your SBI Credit Card ending 5678 at SOME NAME on 07/10/26. Trxn. not done by you? Report at https://sbicard.com/Dispute",
     expect: { template: "sbi-cc-spend", bank: "SBI", accountType: "credit_card", account: "5678", merchant: "SOME NAME", currency: "USD", amountPaise: -2198, date: "2026-10-07" },
@@ -359,6 +364,11 @@ const rules = compileRules(JSON.parse(readFile("rules.example.json")));
 const tx = (fields) => ({ merchant: null, raw: "", bank: "SBI", template: "generic", account: null, currency: "INR", amountPaise: -100, ...fields });
 const tagged = (fields) => tagsFor(rules, tx(fields));
 eq("rule matches merchant pattern", tagged({ merchant: "SWIGGY" }), { category: "Food" });
+eq(
+  "HDFC card spend reaches the Swiggy rule",
+  tagsFor(rules, parseSms("Spent Rs.123.45 On HDFC Bank Card 1111 At RSP*SWIGGY PVT LTD FOO On 2026-11-01:14:16:16.Not You? To Block+Reissue Call 18000000000", RECEIVED)).category,
+  "Food"
+);
 eq("direction condition excludes money in", tagged({ merchant: "Swiggy", amountPaise: 100 }).category, null);
 eq("cashback from text and direction", tagged({ raw: "Rs. 599 credited to your CASHBACK SBI Card", amountPaise: 59900 }).category, "Cashback");
 eq("minAmount is in rupees", tagsFor(compileRules([{ when: { minAmount: 10000 }, set: { category: "Big" } }]), tx({ amountPaise: -999900 })).category, null);
