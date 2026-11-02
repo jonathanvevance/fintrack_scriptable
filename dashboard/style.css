@@ -183,7 +183,9 @@ svg.bubbles { display: block; width: 100%; max-height: 360px; }
 .any-emoji, .emoji-input { display: block; width: 100%; margin-top: 14px; height: 44px; border-radius: 12px; font-size: 16px; }
 .any-emoji { text-align: center; border: 1.5px dashed color-mix(in srgb, var(--blue) 55%, transparent); color: var(--blue); font-weight: 600; }
 .emoji-input { border: 1.5px solid var(--blue); padding: 0 12px; background: var(--card); color: var(--text); font: inherit; }
+.colour-label { margin: 16px 2px 0; color: var(--sec); font-size: 12px; text-transform: uppercase; letter-spacing: .3px; }
 .swatches { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.colour-label + .swatches { margin-top: 7px; }
 .swatches button { width: 30px; height: 30px; border-radius: 15px; }
 .swatches button.on { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--text); }
 .swatch { display: inline-block; width: 14px; height: 14px; border-radius: 7px; vertical-align: -2px; margin-left: 4px; }

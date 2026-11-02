@@ -64,13 +64,22 @@
     ok("food page draws with its rules", /Rules that set Food/i.test(app.innerText) && app.querySelectorAll('[data-act="edit-rule"]').length > 0, app.innerText.slice(0, 300).replace(/\n/g, " "));
     q('[data-act="toggle-look"]').click();
     ok("food: for Food row", labels()[0] === "For “Food”" && rowOf(0)[0] === "🍜", labels().join() + " / " + rowOf(0).join(""));
+    ok("color picker has 12 recommended and 12 more shades",
+      app.querySelectorAll('[data-palette="recommended"]').length === 12 &&
+      app.querySelectorAll('[data-palette="more"]').length === 12 &&
+      /More shades/i.test(app.innerText),
+      app.querySelectorAll('[data-act="pick-colour"]').length);
+    q('[data-palette="more"][data-value="#c93400"]').click();
+    ok("more shade updates the category preview", q('[data-palette="more"][data-value="#c93400"]').classList.contains("on"), q(".ic.xl").getAttribute("style"));
     q('[data-act="toggle-count-spending"]').click();
     ok("category can be excluded from spending", /excluded from spending totals, dashboard categories and Insights/.test(app.innerText), app.innerText);
     ok("excluded category has no trend link", !q('[data-act="see-trend"]'));
     q('[data-act="save-category"]').click();
     await wait(300);
     const excluded = sent[sent.length - 1];
-    ok("category exclusion is saved", excluded.categories.Food.countAsSpending === false, JSON.stringify(excluded.categories.Food));
+    ok("category shade and exclusion are saved",
+      excluded.categories.Food.colour === "#c93400" && excluded.categories.Food.countAsSpending === false,
+      JSON.stringify(excluded.categories.Food));
     ok("no JS errors", errors.length === 0, errors.join("; "));
   } catch (e) {
     out.push("FAIL exception " + e.message + " " + (e.stack || "").split("\n")[1]);

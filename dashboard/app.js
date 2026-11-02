@@ -74,6 +74,7 @@
     [["test"], "#8e8e93", ["🧪"]],
   ];
   const PALETTE = ["#ff9500", "#34c759", "#af52de", "#007aff", "#5856d6", "#ff2d55", "#30b0c7", "#a2845e", "#5ac8fa", "#ff3b30", "#ffcc00", "#8e8e93"];
+  const MORE_SHADES = ["#c93400", "#248a3d", "#8944ab", "#0040dd", "#3634a3", "#d30f45", "#0071a4", "#7f6545", "#0277a8", "#d70015", "#b25000", "#636366"];
   const DEFAULT_EMOJI = "🏷️";
   const UNTAGGED = ["#aeaeb2", "?"];
 
@@ -132,8 +133,11 @@
     const any = emojiOpen
       ? `<input data-field="emojiInput" class="emoji-input" placeholder="Tap 😀 on the keyboard, pick one" autocomplete="off">`
       : `<button class="any-emoji" data-act="any-emoji">😀 Any emoji…</button>`;
-    const swatches = PALETTE.map((c) => `<button data-act="pick-colour" data-value="${c}" class="${c === newLook.colour ? "on" : ""}" style="background:${c}"></button>`).join("");
-    return `<div id="look-picker"><div class="sh">Icon</div><div class="group pad">${lists}${any}<div class="swatches">${swatches}</div></div></div>`;
+    const swatches = (colours, group) => colours.map((c) =>
+      `<button data-act="pick-colour" data-palette="${group}" data-value="${c}" class="${c === newLook.colour ? "on" : ""}" style="background:${c}"></button>`).join("");
+    return `<div id="look-picker"><div class="sh">Icon</div><div class="group pad">${lists}${any}
+      <div class="colour-label">Recommended</div><div class="swatches">${swatches(PALETTE, "recommended")}</div>
+      <div class="colour-label">More shades</div><div class="swatches">${swatches(MORE_SHADES, "more")}</div></div></div>`;
   }
 
   // ---- State ----
