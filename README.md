@@ -65,7 +65,7 @@ Tabs in `FinTrack`:
   - **Add:** tap **＋**, or choose a category on a transaction and tap **Add a New Rule**.
   - **Edit:** tap a rule. Its sentence shows outlined parts (pay / receive money, names, amount, account, a word the SMS says, the category); tap one to change or remove it in a sheet, and add missing parts from **Add to the sentence**. A name matches part of the bank's name unless the rule says **exactly**.
   - **Reorder:** tap **⇅**, drag the **≡** handles, tap **⇅** again to save (or **Cancel**).
-  - **Categories** (row at the top): every category, where you can rename one, change its icon, see and add the rules that set it, merge it into another or delete it. **New Category** takes a name, an emoji and a colour. The icon picker offers a few emoji that fit the name (Pets: 🐾 🐶 🐱 🦴 🐟), the emoji your categories already use, and **Any emoji…** for anything on the keyboard.
+  - **Categories** (row at the top, and **Manage Categories…** in the transaction category picker): every category, where you can rename one, change its icon, see and add the rules that set it, merge it into another or delete it. Turn off **Count as Spending** for a category such as Lent to keep its allocations on transactions while excluding them from spending totals, dashboard categories and Insights. **New Category** takes a name, an emoji and a colour. The icon picker offers a few emoji that fit the name (Pets: 🐾 🐶 🐱 🦴 🐟), the emoji your categories already use, and **Any emoji…** for anything on the keyboard.
   - A catch-all rule such as "When I receive money, it's Received" works if it is the last rule.
 - **More.** **Add Transaction** records a payment or receipt without an SMS; **Import from Clipboard** reads a copied bank SMS. My Accounts, Message Review and App & Updates each open their own small menu.
   - **Message Review → Check Guessed Transactions:** general-parser guesses already included in totals. Copy the exact SMS for parser work, or mark a correct guess so it leaves the queue.
@@ -123,7 +123,7 @@ All under `fintrack/data/` in Scriptable's iCloud folder. Written only by Script
 |---|---|
 | `transactions/YYYY-MM.json` | Array of transactions for that month (below). |
 | `rules.json` | Array of rules: `{ "when": { … }, "set": { "category": "Food" } }`. Conditions: `merchant` and `text` (regex, any case), `direction` (`"in"` / `"out"`), `minAmount` / `maxAmount` (rupees), `account`, `bank`, `template`, `currency`. All must hold. Format in `lib/tags.js`. |
-| `categories.json` | `{ "Food": { "emoji": "🍜", "colour": "#ff9500" }, … }`. Categories without an entry get a look suggested from their name. |
+| `categories.json` | `{ "Food": { "emoji": "🍜", "colour": "#ff9500" }, "Lent": { "emoji": "↗", "colour": "#8e8e93", "countAsSpending": false }, … }`. Categories without an entry get a look suggested from their name; `countAsSpending` defaults to true. |
 | `accounts.json` | `[{ "bank": "HSBC", "account": { "last4", "name", "upi": [], "names": [] } or null, "cards": [{ "last4", "name", "bills": [] }] }]`. Format in `lib/accounts.js`. |
 | `exchange-rates.json` | `{ "version": 1, "provider": "frankfurter", "quote": "INR", "rates": { "USD": { "2026-10-19": 94.93 } } }`. Contains no transaction data. |
 | `unparsed.json` | SMS that no template or the generic parser could read. |

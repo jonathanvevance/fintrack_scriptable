@@ -1,5 +1,5 @@
 // FinTrack dashboard. Scriptable shows this page in a WebView and calls fintrack.load(data) with
-//   { months: { "YYYY-MM": [tx] }, rules: [rule], categories: { name: { emoji, colour } },
+//   { months: { "YYYY-MM": [tx] }, rules: [rule], categories: { name: { emoji, colour, countAsSpending? } },
 //     accounts: [bank], unparsed: [{ id, text }], version, currentMonth: "YYYY-MM" }.
 // The page never writes files. Requests go out through fintrack.send({ action, ... }):
 //   save { rules?: [rule], manual?: { ym, id, manual }, categories?: { name: look }, accounts?: [bank] },
@@ -142,7 +142,7 @@
     months: {},
     rules: [],
     compiled: [],
-    categories: {}, // saved looks: { name: { emoji, colour } }
+    categories: {}, // saved looks/settings: { name: { emoji, colour, countAsSpending? } }
     previewLook: null, // { name, emoji, colour } being picked on the current screen
     accounts: [], // your own banks (lib/accounts.js)
     isSelf: () => null,
@@ -180,8 +180,13 @@
       : state.isSelf(tx);
     return self ? { ...tx, self, category: null } : tx;
   });
-  // What totals, categories and Insights count: everything except self transfers.
+  // Self transfers never count. A category can also opt its outgoing allocation out of spending
+  // and Insights; incoming money is unaffected.
   const counted = (list) => list.filter((tx) => !tx.self);
+  const countsAsSpending = (category) => category == null ||
+    !state.categories[category] || state.categories[category].countAsSpending !== false;
+  const spendingCategories = (list) => categoryTotals(list).filter((item) => countsAsSpending(item.category));
+  const spendingPaise = (list) => spendingCategories(list).reduce((sum, item) => sum + item.paise, 0);
   const monthTx = (ym) => tag(state.months[ym] || []);
   const yearMonths = (y) => Array.from({ length: 12 }, (_, i) => `${y}-${String(i + 1).padStart(2, "0")}`);
   const hasMonth = (ym) => (state.months[ym] || []).length > 0;
@@ -317,7 +322,7 @@
   // Money out per month of year y; tap a bar to open that month.
   function yearBars(y) {
     const yms = yearMonths(y);
-    const spent = yms.map((ym) => (totals(counted(monthTx(ym))).INR || { out: 0 }).out);
+    const spent = yms.map((ym) => spendingPaise(counted(monthTx(ym))));
     const max = Math.max(1, ...spent);
     return `<div class="bars">${yms.map((ym, i) => `<button data-act="month" data-ym="${ym}" ${hasMonth(ym) ? "" : "disabled"}>
       <div class="b" style="height:${Math.max(2, (spent[i] / max) * 100)}%"></div><div class="l">${monthName(ym)[0]}</div></button>`).join("")}</div>`;
@@ -349,7 +354,7 @@
         counts.set(allocation.category, (counts.get(allocation.category) || 0) + 1);
       }
     }
-    return categoryTotals(list)
+    return spendingCategories(list)
       .map((c) => `<button class="li" data-act="open-list" data-filter="${esc(c.category || "untagged")}">${icon(c.category)}
         <div class="main"><div class="t1">${esc(c.category || "No Category")}</div><div class="t2">${plural(counts.get(c.category) || 0, "transaction")}</div></div>
         <div class="amt">${esc(money(c.paise))}</div><span class="chev"></span></button>`)
@@ -359,7 +364,7 @@
   function spendingView() {
     const list = counted(periodTx());
     const t = totals(list);
-    const spent = (t.INR || { out: 0 }).out;
+    const spent = spendingPaise(list);
     const received = (t.INR || { in: 0 }).in;
     let note = "";
     if (state.year) {
@@ -367,7 +372,7 @@
       note = months ? `Monthly average: ${money(Math.round(spent / months / 100) * 100)}` : "";
     }
     const untagged = list.filter((tx) => !tx.category && !(tx.manual && tx.manual.split)).length;
-    const cats = categoryTotals(list);
+    const cats = spendingCategories(list);
 
     return `<div class="large first">Spending<small>${esc(periodLabel())}</small></div>
       ${monthStrip()}
@@ -540,7 +545,8 @@
       .map((name) => `<button class="li" data-act="choose-tx-category" data-value="${esc(name)}">${icon(name, "sq")}
         <div class="main"><div class="t1">${esc(name)}</div></div>${tx.category === name ? `<span class="check">✓</span>` : ""}</button>`)
       .join("");
-    return `${backNav("Choose Category")}<div style="height:8px"></div><div class="group">${rows}</div>`;
+    return `${backNav("Choose Category")}<div style="height:8px"></div><div class="group">${rows}
+      <button class="li plain" data-act="open-categories"><span class="link">Manage Categories…</span></button></div>`;
   }
 
   function ruleWithMerchant(rule, merchant) {
@@ -702,7 +708,7 @@
     if (!newLook || newLook.name !== category) return null;
     const saved = state.categories[category];
     if (saved && saved.emoji === newLook.emoji && saved.colour === newLook.colour) return null;
-    return { ...state.categories, [category]: { emoji: newLook.emoji, colour: newLook.colour } };
+    return { ...state.categories, [category]: { ...(saved || {}), emoji: newLook.emoji, colour: newLook.colour } };
   }
 
   // ---- More: capture by hand, unrecognised messages, update ----
@@ -1064,7 +1070,7 @@
     const yms = Array.from({ length: n }, (_, i) => shiftMonth(state.today, i - n + 1));
     const series = new Map();
     yms.forEach((ym, i) => {
-      for (const c of categoryTotals(monthTx(ym))) {
+      for (const c of spendingCategories(counted(monthTx(ym)))) {
         if (!c.category) continue;
         if (!series.has(c.category)) series.set(c.category, Array(n).fill(0));
         series.get(c.category)[i] = c.paise;
@@ -1095,7 +1101,7 @@
   function recurringList() {
     const today = todayIso();
     const day = Number(today.slice(8));
-    const items = recurringPayments(counted(tag(allTx())), today);
+    const items = recurringPayments(counted(tag(allTx())), today, countsAsSpending);
     if (!items.length) return `<div class="group"><div class="empty">Nothing repeats yet.</div></div>
       <div class="sf">A payment shows up here once FinTrack sees it in two months, around the same day and amount.</div>`;
     const monthly = items.reduce((s, r) => s + r.paise, 0);
@@ -1133,7 +1139,7 @@
   }
 
   function merchantBubbles() {
-    const list = merchantTotals(counted(periodTx()));
+    const list = merchantTotals(counted(periodTx()), countsAsSpending);
     if (!list.length) return `${monthStrip()}<div class="group"><div class="empty">No spending in ${esc(periodLabel())}</div></div>`;
     const picked = list.find((m) => m.merchant === state.bubble) || list[0];
     const circles = packBubbles(list.slice(0, 14));
@@ -1227,7 +1233,7 @@
       <div class="group"><button class="li plain" data-act="new-category"><span class="link">New Category</span></button></div>`;
   }
 
-  // screen: { name (null for a new one), nameInput, newLook, showLook, lookTouched }
+  // screen: { name (null for a new one), nameInput, newLook, showLook, lookTouched, countAsSpending }
   function categoryView(screen) {
     const isNew = screen.name == null;
     const lk = screen.newLook || startLook(screen.name);
@@ -1248,12 +1254,18 @@
         <button class="li plain" data-act="toggle-look"><div class="main"><div class="t1">Icon &amp; Colour</div></div>
           <span class="val">${lk.emoji} <i class="swatch" style="background:${lk.colour}"></i></span><span class="chev ${screen.showLook ? "open" : ""}"></span></button></div>
       ${screen.showLook ? lookPicker(lk, screen.nameInput, screen.emojiOpen) : ""}
+      <div class="sh">Spending</div><div class="group"><button class="li plain" data-act="toggle-count-spending">
+        <div class="main"><div class="t1">Count as Spending</div><div class="t2">Include in totals and Insights</div></div>
+        <span class="toggle ${screen.countAsSpending ? "on" : ""}"></span></button></div>
+      <div class="sf">${screen.countAsSpending
+        ? `${esc(screen.name)} is included in spending totals, dashboard categories and Insights.`
+        : `${esc(screen.name)} stays on its transactions but is excluded from spending totals, dashboard categories and Insights.`}</div>
       <div class="sh">Rules that set ${esc(screen.name)}</div>
       ${cards}
       <div class="group"><button class="li plain" data-act="new-rule" data-category="${esc(screen.name)}"><span class="link">Add Rule for ${esc(screen.name)}</span></button></div>
       <div class="group">
         ${u.hand ? `<button class="li plain" data-act="open-hand" data-value="${esc(screen.name)}"><div class="main"><div class="t1">Set by Hand</div></div><span class="val">${u.hand}</span><span class="chev"></span></button>` : ""}
-        <button class="li plain" data-act="see-trend" data-value="${esc(screen.name)}"><span class="link">See Trend</span></button></div>
+        ${screen.countAsSpending ? `<button class="li plain" data-act="see-trend" data-value="${esc(screen.name)}"><span class="link">See Trend</span></button>` : ""}</div>
       <div class="group">
         ${others ? `<button class="li plain" data-act="merge-category"><span class="link">Merge into Another Category…</span></button>` : ""}
         <button class="li plain" data-act="delete-category"><span class="danger">Delete ${esc(screen.name)}</span></button></div>
@@ -1270,17 +1282,33 @@
       const [c, emoji] = screen.lookTouched ? [screen.newLook.colour, screen.newLook.emoji] : suggestLook(name);
       const from = state.stack[state.stack.length - 2];
       const fromRule = from && from.type === "rule";
-      return commit({ categories: { ...state.categories, [name]: { emoji, colour: c } } }, "Category added", `${name} is ready to pick.`,
+      const setting = screen.countAsSpending === false ? { countAsSpending: false } : {};
+      return commit({ categories: { ...state.categories, [name]: { emoji, colour: c, ...setting } } }, "Category added", `${name} is ready to pick.`,
         { pop: true, quiet: fromRule, after: fromRule ? () => { top().fields.category = name; } : null });
     }
     if (name === screen.name) {
-      const change = lookPayload(screen.newLook, name);
-      if (!change) return back();
-      return commit({ categories: change }, "Icon saved", `${name} has a new icon.`, { pop: true });
+      const saved = state.categories[name] || {};
+      const settingChanged = screen.countAsSpending !== countsAsSpending(name);
+      const lookChange = lookPayload(screen.newLook, name);
+      if (!lookChange && !settingChanged) return back();
+      const categories = lookChange || { ...state.categories };
+      if (settingChanged) {
+        const next = { ...(categories[name] || saved) };
+        if (!next.emoji || !next.colour) {
+          next.emoji = lk.emoji;
+          next.colour = lk.colour;
+        }
+        if (screen.countAsSpending === false) next.countAsSpending = false;
+        else delete next.countAsSpending;
+        categories[name] = next;
+      }
+      return commit({ categories }, "Category saved", `${name} has been updated.`, { pop: true });
     }
     const payload = moveCategory(screen.name, name);
     const lk = screen.newLook || startLook(screen.name);
-    payload.categories[name] = { emoji: lk.emoji, colour: lk.colour };
+    payload.categories[name] = { ...(payload.categories[name] || {}), emoji: lk.emoji, colour: lk.colour };
+    if (screen.countAsSpending === false) payload.categories[name].countAsSpending = false;
+    else delete payload.categories[name].countAsSpending;
     commit(payload, "Category renamed", `${screen.name} is now ${name}.`, { pop: true });
   }
 
@@ -1722,10 +1750,17 @@
     },
     "pick-colour": (el) => { top().newLook.colour = el.dataset.value; top().lookTouched = true; render(); },
     "open-categories": () => push({ type: "categories" }),
-    "open-category": (el) => push({ type: "category", name: el.dataset.value, nameInput: el.dataset.value, newLook: null, showLook: false }),
+    "open-category": (el) => push({
+      type: "category",
+      name: el.dataset.value,
+      nameInput: el.dataset.value,
+      newLook: null,
+      showLook: false,
+      countAsSpending: countsAsSpending(el.dataset.value),
+    }),
     "new-category": () => {
       if (top() && top().type === "rule") top().sheet = null;
-      push({ type: "category", name: null, nameInput: "", newLook: { name: "", emoji: DEFAULT_EMOJI, colour: "#8e8e93" }, showLook: true, lookTouched: false });
+      push({ type: "category", name: null, nameInput: "", newLook: { name: "", emoji: DEFAULT_EMOJI, colour: "#8e8e93" }, showLook: true, lookTouched: false, countAsSpending: true });
     },
     "toggle-look": () => {
       const s = top();
@@ -1733,6 +1768,7 @@
       if (s.showLook && !s.newLook) s.newLook = startLook(s.name);
       render();
     },
+    "toggle-count-spending": () => { top().countAsSpending = !top().countAsSpending; render(); },
     "save-category": () => saveCategory(top()),
     "open-hand": (el) => push({ type: "list", hand: el.dataset.value }),
     "merge-category": () => push({ type: "merge", from: top().name }),

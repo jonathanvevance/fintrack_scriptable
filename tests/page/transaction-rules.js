@@ -32,6 +32,10 @@
 
     click('[data-act="change-tx-category"]');
     ok("category choice is a focused page", /Choose Category/.test(text()) && !/Original message/.test(text()), text().slice(0, 400));
+    ok("category choice links to category management", !!app.querySelector('[data-act="open-categories"]'), text());
+    click('[data-act="open-categories"]');
+    ok("manage categories opens the shared categories page", /Categories/.test(text()) && /New Category/.test(text()), text());
+    click('[data-act="back"]');
     click('[data-act="choose-tx-category"][data-value="Food"]');
     await wait(300);
     const manual = sent[sent.length - 1];

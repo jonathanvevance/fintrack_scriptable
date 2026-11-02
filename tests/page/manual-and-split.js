@@ -109,6 +109,19 @@
     ok("amount split stores only own amount", amount.manual.manual.split.mode === "amount" &&
       amount.manual.manual.split.ownPaise === 3500000 && !("people" in amount.manual.manual.split), JSON.stringify(amount));
     await wait(250);
+    fintrack.load({
+      months,
+      rules,
+      categories: { Lent: { emoji: "L", colour: "#8e8e93", countAsSpending: false } },
+      accounts,
+      unparsed,
+      version: "preview",
+      currentMonth: "2026-10",
+    });
+    click('[data-act="back"]');
+    ok("excluded Lent allocation leaves only the own share in spending",
+      /₹68,719.86/.test(text()) && !/Lent.*₹65,000/.test(text()), text());
+    click(`[data-act="open-tx"][data-id="${splitTx.id}"]`);
     click('[data-act="open-split"]');
     click('[data-act="remove-split"]');
     await wait(250);

@@ -6,9 +6,10 @@
 
 const store = importModule("fintrack/lib/store.js");
 const { recheck } = importModule("fintrack/lib/capture.js");
-const { money, monthLabel, totals } = importModule("fintrack/lib/format.js");
+const { money, monthLabel, categoryTotals } = importModule("fintrack/lib/format.js");
 const { openDashboard } = importModule("fintrack/lib/dashboard.js");
 const { compileAccounts } = importModule("fintrack/lib/accounts.js");
+const { compileRules, tagAll } = importModule("fintrack/lib/tags.js");
 const { annotateTransaction, cleanCache } = importModule("fintrack/lib/exchange.js");
 
 const RED = new Color("#d64545");
@@ -29,14 +30,20 @@ async function runWidget() {
   } catch (_) {
     rates = cleanCache(null);
   }
-  const list = (await store.listMonth(ym)).filter((tx) => !isSelf(tx)).map((tx) => annotateTransaction(tx, rates));
-  const inr = totals(list).INR || { out: 0, in: 0 };
+  const rules = compileRules(await store.readRules());
+  const categories = await store.readCategories();
+  const list = tagAll(rules, (await store.listMonth(ym))
+    .filter((tx) => !(tx.manual && tx.manual.selfTransfer) && !isSelf(tx))
+    .map((tx) => annotateTransaction(tx, rates)));
+  const out = categoryTotals(list)
+    .filter(({ category }) => category == null || !categories[category] || categories[category].countAsSpending !== false)
+    .reduce((sum, item) => sum + item.paise, 0);
   const w = new ListWidget();
   w.url = "scriptable:///run?scriptName=" + encodeURIComponent("FinTrack");
   const title = w.addText(`${monthLabel(ym)} spent`);
   title.font = Font.mediumSystemFont(12);
   title.textColor = GREY;
-  const total = w.addText(money(inr.out));
+  const total = w.addText(money(out));
   total.font = Font.boldSystemFont(24);
   total.minimumScaleFactor = 0.5;
   w.addSpacer(6);

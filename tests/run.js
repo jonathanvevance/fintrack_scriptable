@@ -333,6 +333,17 @@ eq(
   merchantTotals([{ merchant: "STREAMBOX", category: "Subscriptions", currency: "USD", amountPaise: -2000, inrPaise: -189860 }]),
   [{ merchant: "STREAMBOX", paise: 189860, count: 1, category: "Subscriptions" }]
 );
+eq(
+  "merchant total can exclude one split allocation category",
+  merchantTotals([{
+    merchant: "Furniture Store",
+    category: "Shopping",
+    currency: "INR",
+    amountPaise: -10000000,
+    manual: { split: { ownPaise: 2000000, ownCategory: "Shopping", lentCategory: "Lent" } },
+  }], (category) => category !== "Lent"),
+  [{ merchant: "Furniture Store", paise: 2000000, count: 1, category: "Shopping" }]
+);
 
 const RATE_CACHE = { version: 1, provider: "frankfurter", quote: "INR", rates: { USD: { "2026-10-16": 94.96, "2026-10-19": 94.93 } } };
 eq("exchange: exact date", rateFor(RATE_CACHE, "USD", "2026-10-19"), { rate: 94.93, date: "2026-10-19" });
@@ -453,6 +464,10 @@ eq(
 );
 eq("recurring: last paid last month is still upcoming", recurringPayments([pay("Airtel", "2026-08-12", 999), pay("Airtel", "2026-09-12", 999)], "2026-10-05")[0].paidThisMonth, false);
 eq("recurring: one month is not enough", recurring([pay("Netflix", "2026-10-03", 649)]), []);
+eq("recurring: excluded category is ignored", recurringPayments([
+  pay("Loan", "2026-09-03", 649, "Lent"),
+  pay("Loan", "2026-10-03", 649, "Lent"),
+], "2026-10-28", (category) => category !== "Lent"), []);
 eq("recurring: frequent merchant is not a bill", recurring([pay("Swiggy", "2026-09-02", 300), pay("Swiggy", "2026-09-09", 320), pay("Swiggy", "2026-10-02", 310), pay("Swiggy", "2026-10-15", 290)]), []);
 eq("recurring: amount changes too much", recurring([pay("Amazon", "2026-09-05", 500), pay("Amazon", "2026-10-05", 1500)]), []);
 eq("recurring: day moves too much", recurring([pay("Uber", "2026-09-02", 200), pay("Uber", "2026-10-20", 200)]), []);
