@@ -175,6 +175,7 @@ Templates in `lib/parse.js` (`TEMPLATES`, tried in order; the id is saved as `te
 | `hsbc-card-payment` | HSBC card bill paid from an HSBC account (self transfer) |
 | `sbi-upi-debit` | SBI UPI debit ("trf to …") |
 | `sbi-transfer-in` | SBI account credited by a transfer from a named sender |
+| `sbi-imps-in` | SBI account credited by IMPS from a mobile-linked account |
 | `sbi-cc-spend` | SBI card spent at … |
 | `sbi-cc-cashback` | SBI Cashback card cashback credited |
 | `sbi-cc-payment` | SBI Card payment received (self transfer) |
